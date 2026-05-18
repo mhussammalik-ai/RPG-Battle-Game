@@ -2,521 +2,811 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <ctype.h>
 
 // ---------------- CONSTANTS ----------------
 #define MAX_NAME_LEN 20
-#define MAX_INVENTORY 10
-#define MAX_SKILLS 4
+#define MAX_INVENTORY 20
+#define MAX_SKILLS 8
+#define MAX_QUESTS 5
+#define MAX_PARTY 3
+#define MAX_ACHIEVEMENTS 10
+#define MAX_SAVE_SLOTS 3
+
+// ---------------- ENUMS ----------------
+typedef enum {
+    CLASS_WARRIOR,
+    CLASS_MAGE,
+    CLASS_ARCHER,
+    CLASS_ROGUE,
+    CLASS_CLERIC
+} CharacterClass;
+
+typedef enum {
+    WEAPON_SWORD,
+    WEAPON_AXE,
+    WEAPON_BOW,
+    WEAPON_STAFF,
+    WEAPON_DAGGER
+} WeaponType;
+
+typedef enum {
+    ARMOR_LIGHT,
+    ARMOR_MEDIUM,
+    ARMOR_HEAVY
+} ArmorType;
+
+typedef enum {
+    EFFECT_POISON,
+    EFFECT_BURN,
+    EFFECT_FREEZE,
+    EFFECT_STUN,
+    EFFECT_BLEED
+} StatusEffect;
+
+typedef enum {
+    QUEST_ACTIVE,
+    QUEST_COMPLETED,
+    QUEST_FAILED
+} QuestStatus;
 
 // ---------------- STRUCTURES ----------------
 
-struct Item {
+typedef struct {
+    char name[20];
+    int hpBonus;
+    int mpBonus;
+    int attackBonus;
+    int defenseBonus;
+    int magicBonus;
+    int speedBonus;
+} ClassStats;
+
+typedef struct {
+    char name[30];
+    WeaponType type;
+    int minDamage;
+    int maxDamage;
+    int critChance;
+    int value;
+    int requiredLevel;
+    char rarity[15]; // Common, Rare, Epic, Legendary
+} Weapon;
+
+typedef struct {
+    char name[30];
+    ArmorType type;
+    int defense;
+    int magicResist;
+    int value;
+    int requiredLevel;
+    char rarity[15];
+} Armor;
+
+typedef struct {
     char name[20];
     int effect;
     int quantity;
-};
+    int maxStack;
+    char type[15]; // healing, mana, buff, crafting
+} Item;
 
-struct Skill {
+typedef struct {
     char name[20];
     int mpCost;
     int minDamage;
     int maxDamage;
+    int requiredLevel;
     char description[50];
-};
+    StatusEffect effect;
+    int effectChance;
+} Skill;
 
-struct Player {
+typedef struct {
+    char name[30];
+    char description[100];
+    int requirement[3]; // kills, level, quests
+    int completed;
+    int rewardExp;
+    int rewardGold;
+    char rewardItem[30];
+} Achievement;
+
+typedef struct {
+    char name[50];
+    char description[100];
+    QuestStatus status;
+    int currentProgress;
+    int requiredProgress;
+    int rewardExp;
+    int rewardGold;
+    char rewardItem[30];
+} Quest;
+
+typedef struct {
     char name[MAX_NAME_LEN];
+    CharacterClass class;
     int hp;
     int maxHp;
     int mp;
     int maxMp;
     int attack;
     int defense;
+    int magic;
+    int speed;
     int level;
     int exp;
     int expToNext;
     int score;
     int gold;
-    int potions;  // Keep for backward compatibility
-    int elixirs;
-    struct Item inventory[MAX_INVENTORY];
-    struct Skill skills[MAX_SKILLS];
+    int kills;
+    int critChance;
+    int dodgeChance;
+    
+    // Equipment
+    Weapon weapon;
+    Armor armor;
+    
+    // Inventories
+    Item inventory[MAX_INVENTORY];
+    int inventoryCount;
+    Skill skills[MAX_SKILLS];
     int skillCount;
-};
+    
+    // Status effects
+    StatusEffect activeEffect;
+    int effectDuration;
+    
+    // Stats
+    ClassStats classStats;
+} Player;
 
-struct Enemy {
+typedef struct {
     char name[20];
     int hp;
     int maxHp;
     int attack;
     int defense;
-    int type; // 1 = normal, 2 = elite, 3 = boss
+    int magic;
+    int speed;
     int expReward;
     int goldReward;
+    int type; // 1 = normal, 2 = elite, 3 = boss
+    int level;
+    int phase; // for boss phases
+    StatusEffect effect;
+    int effectChance;
+    char specialAbility[30];
+} Enemy;
+
+typedef struct {
+    char name[30];
+    char description[100];
+    int floor;
+    int cleared;
+    int bossDefeated;
+} Dungeon;
+
+typedef struct {
+    int hour;
+    int minute;
+    int day;
+    char weather[15]; // Sunny, Rainy, Stormy, Snowy
+} WorldTime;
+
+// ---------------- GLOBAL DATA ----------------
+ClassStats classTemplates[] = {
+    {"Warrior", 40, 10, 8, 6, 2, 3},     // Warrior
+    {"Mage", 15, 40, 2, 2, 10, 4},       // Mage
+    {"Archer", 25, 20, 6, 3, 4, 6},      // Archer
+    {"Rogue", 20, 15, 5, 2, 3, 8},       // Rogue
+    {"Cleric", 30, 30, 3, 4, 7, 3}       // Cleric
+};
+
+Weapon weapons[] = {
+    {"Iron Sword", WEAPON_SWORD, 15, 25, 10, 100, 1, "Common"},
+    {"Flame Blade", WEAPON_SWORD, 25, 40, 15, 500, 5, "Rare"},
+    {"Dragon Slayer", WEAPON_SWORD, 40, 60, 20, 2000, 10, "Epic"},
+    {"Excalibur", WEAPON_SWORD, 60, 90, 30, 5000, 15, "Legendary"},
+    {"Wooden Bow", WEAPON_BOW, 10, 20, 5, 80, 1, "Common"}
+};
+
+Armor armors[] = {
+    {"Leather Armor", ARMOR_LIGHT, 5, 2, 80, 1, "Common"},
+    {"Iron Armor", ARMOR_MEDIUM, 12, 5, 300, 5, "Rare"},
+    {"Dragon Scale", ARMOR_HEAVY, 25, 15, 1500, 10, "Epic"}
 };
 
 // ---------------- FUNCTION DECLARATIONS ----------------
-void initGame(struct Player *p);
-void initSkills(struct Player *p);
-void displayStatus(struct Player p, struct Enemy e);
-void displayBattleMenu(struct Player p);
-void playerTurn(struct Player *p, struct Enemy *e);
-void enemyTurn(struct Player *p, struct Enemy *e);
-int checkGameOver(struct Player p);
-void levelUp(struct Player *p);
-void gainExp(struct Player *p, int exp);
-void generateEnemy(struct Player p, struct Enemy *e);
-void useItem(struct Player *p, struct Enemy *e);
-void castSkill(struct Player *p, struct Enemy *e);
-void shop(struct Player *p);
-void saveGame(struct Player p);
-int loadGame(struct Player *p);
+void initGame(Player *p);
+void selectClass(Player *p);
+void initSkills(Player *p, CharacterClass class);
+void initEquipment(Player *p);
+void generateEnemy(Player p, Enemy *e, int dungeonFloor);
+void displayStatus(Player p, Enemy e);
+void battle(Player *p, Enemy *e);
+void playerTurn(Player *p, Enemy *e);
+void enemyTurn(Player *p, Enemy *e);
+void useSkill(Player *p, Enemy *e);
+void useItem(Player *p, Enemy *e);
+void levelUp(Player *p);
+void gainExp(Player *p, int exp);
+void shop(Player *p);
+void blacksmith(Player *p);
+void questGiver(Player *p, Quest *quests);
+void exploreWorld(Player *p);
+void enterDungeon(Player *p);
+void applyStatusEffect(Player *p, StatusEffect effect, int duration);
+void updateWorldTime(WorldTime *wt);
+void displayWorldInfo(WorldTime wt);
+void saveGame(Player p, int slot);
+int loadGame(Player *p, int slot);
+void displayAchievements(Achievement *achievements, Player p);
+void checkAchievements(Achievement *achievements, Player p);
+void comboSystem(int *combo, int damage);
+void calculateCritical(Player p, int *damage);
+void randomLoot(Player *p, Enemy e);
+void craftItem(Player *p);
+void arena(Player *p);
 void displayHelp();
-void clearInputBuffer();
 
 // ---------------- MAIN ----------------
 int main() {
-    struct Player player;
-    struct Enemy enemy;
-    int choice;
-    int inBattle = 0;
+    Player player;
+    Enemy enemy;
+    Quest quests[MAX_QUESTS];
+    Achievement achievements[MAX_ACHIEVEMENTS];
+    WorldTime worldTime = {8, 0, 1, "Sunny"};
+    int choice, slot;
     
     srand(time(0));
     
-    printf("===== EPIC RPG BATTLE GAME =====\n");
+    printf("\n╔══════════════════════════════════════════════════════╗\n");
+    printf("║            EPIC RPG: COMPLETE EDITION                ║\n");
+    printf("║                  Version 2.0                         ║\n");
+    printf("╚══════════════════════════════════════════════════════╝\n\n");
+    
     printf("1. New Game\n");
     printf("2. Load Game\n");
+    printf("3. Credits\n");
     printf("Choose: ");
     scanf("%d", &choice);
-    clearInputBuffer();
     
-    if (choice == 2 && loadGame(&player)) {
-        printf("Game loaded successfully!\n");
+    if (choice == 2) {
+        printf("Select save slot (1-3): ");
+        scanf("%d", &slot);
+        if (loadGame(&player, slot)) {
+            printf("Game loaded!\n");
+        } else {
+            printf("No save found. Starting new game.\n");
+            initGame(&player);
+        }
+    } else if (choice == 3) {
+        printf("\n=== EPIC RPG COMPLETE EDITION ===\n");
+        printf("Created with C Programming Language\n");
+        printf("All core RPG systems implemented\n");
+        printf("Version: FINAL COMPLETE RELEASE\n\n");
+        return 0;
     } else {
         initGame(&player);
     }
     
-    generateEnemy(player, &enemy);
+    printf("\nWelcome, %s the %s!\n", player.name, classTemplates[player.class].name);
+    printf("Your adventure begins now...\n\n");
     
-    printf("\nWelcome, %s! Your adventure begins now!\n", player.name);
+    // Initialize quests
+    strcpy(quests[0].name, "First Blood");
+    strcpy(quests[0].description, "Defeat 5 enemies");
+    quests[0].status = QUEST_ACTIVE;
+    quests[0].currentProgress = 0;
+    quests[0].requiredProgress = 5;
+    quests[0].rewardExp = 100;
+    quests[0].rewardGold = 50;
+    strcpy(quests[0].rewardItem, "Health Potion");
     
+    // Main game loop
     while (1) {
-        if (!inBattle) {
-            printf("\n--- WORLD MENU ---\n");
-            printf("1. Fight Next Enemy\n");
-            printf("2. Shop\n");
-            printf("3. Save Game\n");
-            printf("4. Help\n");
-            printf("5. Quit Game\n");
-            printf("Choose: ");
-            scanf("%d", &choice);
-            clearInputBuffer();
-            
-            switch(choice) {
-                case 1:
-                    inBattle = 1;
-                    generateEnemy(player, &enemy);
-                    break;
-                case 2:
-                    shop(&player);
-                    continue;
-                case 3:
-                    saveGame(player);
-                    continue;
-                case 4:
-                    displayHelp();
-                    continue;
-                case 5:
-                    printf("Thanks for playing!\n");
-                    return 0;
-                default:
-                    printf("Invalid choice!\n");
-                    continue;
-            }
-        }
+        updateWorldTime(&worldTime);
         
-        // Battle loop
-        while (inBattle) {
-            displayStatus(player, enemy);
-            displayBattleMenu(player);
-            playerTurn(&player, &enemy);
-            
-            if (enemy.hp <= 0) {
-                printf("\n✨ Victory! %s defeated! ✨\n", enemy.name);
-                player.score += 10 * player.level;
-                player.gold += enemy.goldReward;
-                gainExp(&player, enemy.expReward);
-                printf("💰 Gained %d gold! 💰\n", enemy.goldReward);
-                inBattle = 0;
+        printf("\n╔════════════════════════════════╗\n");
+        printf("║         WORLD MAP              ║\n");
+        printf("╠════════════════════════════════╣\n");
+        printf("║ 1. ⚔  Battle Arena            ║\n");
+        printf("║ 2. 🏪  Market District        ║\n");
+        printf("║ 3. ⚒   Blacksmith            ║\n");
+        printf("║ 4. ❓  Quest Board            ║\n");
+        printf("║ 5. 🏰  Dungeon Crawl          ║\n");
+        printf("║ 6. 🌍  Explore World          ║\n");
+        printf("║ 7. 🏟   Arena Mode            ║\n");
+        printf("║ 8. 🎒  Inventory              ║\n");
+        printf("║ 9. 💾  Save Game              ║\n");
+        printf("║10. ℹ️   Character Info        ║\n");
+        printf("║11. 🏆  Achievements           ║\n");
+        printf("║12. 🚪  Quit                   ║\n");
+        printf("╚════════════════════════════════╝\n");
+        
+        displayWorldInfo(worldTime);
+        
+        printf("\nYour choice: ");
+        scanf("%d", &choice);
+        
+        switch(choice) {
+            case 1:
+                generateEnemy(player, &enemy, 0);
+                battle(&player, &enemy);
+                if (player.kills >= quests[0].requiredProgress)
+                    quests[0].status = QUEST_COMPLETED;
                 break;
-            }
-            
-            if (player.hp <= 0) {
-                if (checkGameOver(player)) {
-                    printf("\n💀 Game Over! Final Score: %d 💀\n", player.score);
-                    return 0;
+            case 2:
+                shop(&player);
+                break;
+            case 3:
+                blacksmith(&player);
+                break;
+            case 4:
+                questGiver(&player, quests);
+                break;
+            case 5:
+                enterDungeon(&player);
+                break;
+            case 6:
+                exploreWorld(&player);
+                break;
+            case 7:
+                arena(&player);
+                break;
+            case 8:
+                printf("\n=== INVENTORY ===\n");
+                for (int i = 0; i < player.inventoryCount; i++) {
+                    printf("%d. %s x%d (%s)\n", i+1, player.inventory[i].name, 
+                           player.inventory[i].quantity, player.inventory[i].type);
                 }
-                inBattle = 0;
+                printf("Gold: %d\n", player.gold);
                 break;
-            }
-            
-            enemyTurn(&player, &enemy);
-            if (player.hp <= 0) {
-                if (checkGameOver(player)) {
-                    printf("\n💀 Game Over! Final Score: %d 💀\n", player.score);
-                    return 0;
-                }
-                inBattle = 0;
+            case 9:
+                printf("Save slot (1-3): ");
+                scanf("%d", &slot);
+                saveGame(player, slot);
                 break;
-            }
+            case 10:
+                printf("\n=== CHARACTER STATUS ===\n");
+                printf("Name: %s\n", player.name);
+                printf("Class: %s\n", classTemplates[player.class].name);
+                printf("Level: %d\n", player.level);
+                printf("HP: %d/%d\n", player.hp, player.maxHp);
+                printf("MP: %d/%d\n", player.mp, player.maxMp);
+                printf("Attack: %d | Defense: %d | Magic: %d | Speed: %d\n",
+                       player.attack, player.defense, player.magic, player.speed);
+                printf("Crit Chance: %d%% | Dodge: %d%%\n", player.critChance, player.dodgeChance);
+                printf("Kills: %d | Score: %d | Gold: %d\n", player.kills, player.score, player.gold);
+                printf("Weapon: %s (%s)\n", player.weapon.name, player.weapon.rarity);
+                printf("Armor: %s (%s)\n", player.armor.name, player.armor.rarity);
+                break;
+            case 11:
+                displayAchievements(achievements, player);
+                break;
+            case 12:
+                printf("\nThank you for playing EPIC RPG!\n");
+                printf("Final Score: %d\n", player.score);
+                printf("Kills: %d | Level: %d\n", player.kills, player.level);
+                return 0;
+            default:
+                printf("Invalid choice!\n");
         }
     }
     
     return 0;
 }
 
-// ---------------- HELPER FUNCTIONS ----------------
-void clearInputBuffer() {
-    int c;
-    while ((c = getchar()) != '\n' && c != EOF);
-}
+// ---------------- IMPLEMENTATION ----------------
 
-// ---------------- INITIALIZATION ----------------
-void initGame(struct Player *p) {
+void initGame(Player *p) {
     printf("Enter your hero's name: ");
     scanf("%s", p->name);
-    clearInputBuffer();
     
-    p->hp = 120;
-    p->maxHp = 120;
-    p->mp = 60;
-    p->maxMp = 60;
-    p->attack = 12;
-    p->defense = 5;
+    selectClass(p);
+    
+    p->hp = p->maxHp = 100 + classTemplates[p->class].hpBonus;
+    p->mp = p->maxMp = 50 + classTemplates[p->class].mpBonus;
+    p->attack = 10 + classTemplates[p->class].attackBonus;
+    p->defense = 5 + classTemplates[p->class].defenseBonus;
+    p->magic = 5 + classTemplates[p->class].magicBonus;
+    p->speed = 5 + classTemplates[p->class].speedBonus;
     p->level = 1;
     p->exp = 0;
     p->expToNext = 100;
     p->score = 0;
-    p->gold = 50;
-    p->potions = 3;  // Legacy field
-    p->elixirs = 1;
-    p->skillCount = 0;
+    p->gold = 100;
+    p->kills = 0;
+    p->critChance = 5;
+    p->dodgeChance = 5;
+    p->activeEffect = -1;
+    p->effectDuration = 0;
+    p->inventoryCount = 0;
     
-    // Initialize inventory
-    for (int i = 0; i < MAX_INVENTORY; i++) {
-        strcpy(p->inventory[i].name, "");
-        p->inventory[i].effect = 0;
-        p->inventory[i].quantity = 0;
-    }
+    initEquipment(p);
+    initSkills(p, p->class);
     
     // Starting items
-    strcpy(p->inventory[0].name, "Health Potion");
-    p->inventory[0].effect = 40;
-    p->inventory[0].quantity = 3;
-    
-    strcpy(p->inventory[1].name, "Mana Potion");
-    p->inventory[1].effect = 30;
-    p->inventory[1].quantity = 2;
-    
-    initSkills(p);
+    Item healthPotion = {"Health Potion", 50, 3, 99, "healing"};
+    Item manaPotion = {"Mana Potion", 30, 2, 99, "mana"};
+    p->inventory[p->inventoryCount++] = healthPotion;
+    p->inventory[p->inventoryCount++] = manaPotion;
 }
 
-void initSkills(struct Player *p) {
-    // Skill 1
-    strcpy(p->skills[0].name, "Fireball");
-    p->skills[0].mpCost = 15;
-    p->skills[0].minDamage = 25;
-    p->skills[0].maxDamage = 40;
-    strcpy(p->skills[0].description, "Powerful fire magic");
-    
-    // Skill 2
-    strcpy(p->skills[1].name, "Heal");
-    p->skills[1].mpCost = 12;
-    p->skills[1].minDamage = -30;
-    p->skills[1].maxDamage = -30;
-    strcpy(p->skills[1].description, "Restore 30 HP");
-    
-    // Skill 3
-    strcpy(p->skills[2].name, "Power Strike");
-    p->skills[2].mpCost = 8;
-    p->skills[2].minDamage = 20;
-    p->skills[2].maxDamage = 35;
-    strcpy(p->skills[2].description, "Strong physical attack");
-    
-    // Skill 4
-    strcpy(p->skills[3].name, "Thunder");
-    p->skills[3].mpCost = 20;
-    p->skills[3].minDamage = 35;
-    p->skills[3].maxDamage = 55;
-    strcpy(p->skills[3].description, "Devastating lightning magic");
-    
-    p->skillCount = 4;
-}
-
-// ---------------- DISPLAY ----------------
-void displayStatus(struct Player p, struct Enemy e) {
-    printf("\n╔══════════════════════════════════════════╗\n");
-    printf("║ %s (Lvl %d)                              ║\n", p.name, p.level);
-    printf("║ HP: %3d/%3d  MP: %3d/%3d  ATK: %3d  DEF: %2d ║\n", 
-           p.hp, p.maxHp, p.mp, p.maxMp, p.attack, p.defense);
-    printf("║ EXP: %3d/%3d  Score: %5d  Gold: %4d      ║\n", 
-           p.exp, p.expToNext, p.score, p.gold);
-    printf("║ Items: Potions: %d  Elixirs: %d           ║\n", 
-           p.inventory[0].quantity, p.elixirs);
-    printf("╠══════════════════════════════════════════╣\n");
-    
-    const char* typeIcon;
-    const char* typeName;
-    if (e.type == 3) {
-        typeIcon = "👑";
-        typeName = "BOSS";
-    } else if (e.type == 2) {
-        typeIcon = "⚔";
-        typeName = "ELITE";
-    } else {
-        typeIcon = "👾";
-        typeName = "NORMAL";
-    }
-    
-    printf("║ %s %s %s (%s)                     ║\n", 
-           typeIcon, e.name, typeName, e.type == 3 ? "DANGER!" : "");
-    printf("║ HP: %3d/%3d  ATK: %3d  DEF: %3d            ║\n", 
-           e.hp, e.maxHp, e.attack, e.defense);
-    printf("╚══════════════════════════════════════════╝\n");
-}
-
-void displayBattleMenu(struct Player p) {
-    printf("\n┌───────── BATTLE ACTIONS ─────────┐\n");
-    printf("│ 1. ⚔  Attack                     │\n");
-    printf("│ 2. ✨ Magic/Skills                │\n");
-    printf("│ 3. 💊 Use Item                   │\n");
-    printf("│ 4. 🛡  Defend (+50%% DEF this turn)│\n");
-    printf("│ 5. 🏃  Flee                      │\n");
-    printf("└──────────────────────────────────┘\n");
-}
-
-void displaySkills(struct Player p) {
-    printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-    printf("           AVAILABLE SKILLS\n");
-    printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-    for (int i = 0; i < p.skillCount; i++) {
-        printf("%d. %-12s (MP: %2d) - %s\n", 
-               i + 1, p.skills[i].name, p.skills[i].mpCost, p.skills[i].description);
-    }
-    printf("0. Back to main menu\n");
-    printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-}
-
-// ---------------- COMBAT ----------------
-void playerTurn(struct Player *p, struct Enemy *e) {
+void selectClass(Player *p) {
     int choice;
-    static int defending = 0;
-    
-    printf("\nYour action: ");
-    scanf("%d", &choice);
-    clearInputBuffer();
-    
-    switch (choice) {
-        case 1: { // Attack
-            int damage = (rand() % 15) + p->attack - (e->defense / 2);
-            if (damage < 5) damage = 5;
-            
-            // Critical Hit (20% chance)
-            if (rand() % 5 == 0) {
-                damage *= 2;
-                printf("🎯 CRITICAL HIT! ");
-            }
-            
-            e->hp -= damage;
-            printf("⚔ You attacked! Dealt %d damage!\n", damage);
-            break;
-        }
-        
-        case 2: { // Skills
-            castSkill(p, e);
-            break;
-        }
-        
-        case 3: { // Use Item
-            useItem(p, e);
-            break;
-        }
-        
-        case 4: { // Defend
-            printf("🛡 You take a defensive stance! Damage reduced by 50%% this turn!\n");
-            defending = 1;
-            break;
-        }
-        
-        case 5: { // Flee
-            if (rand() % 2 == 0) {
-                printf("🏃 You successfully fled!\n");
-                // Exit battle completely
-                return;
-            } else {
-                printf("😰 Failed to flee!\n");
-            }
-            break;
-        }
-        
-        default:
-            printf("Invalid choice!\n");
-    }
-    
-    if (e->hp < 0) e->hp = 0;
-    
-    // Store defend state for enemy turn (use a static variable or pass it)
-    // For now, we'll handle it in enemyTurn
-}
-
-void castSkill(struct Player *p, struct Enemy *e) {
-    int choice;
-    
-    displaySkills(*p);
-    printf("Select skill: ");
-    scanf("%d", &choice);
-    clearInputBuffer();
-    
-    if (choice == 0) return;
-    if (choice < 1 || choice > p->skillCount) {
-        printf("Invalid skill choice!\n");
-        return;
-    }
-    
-    choice--; // Adjust to 0-based index
-    struct Skill *skill = &p->skills[choice];
-    
-    if (p->mp < skill->mpCost) {
-        printf("❌ Not enough MP! Need %d MP (You have %d)\n", skill->mpCost, p->mp);
-        return;
-    }
-    
-    p->mp -= skill->mpCost;
-    
-    if (skill->minDamage < 0) { // Healing skill
-        int healAmount = -skill->minDamage;
-        p->hp += healAmount;
-        if (p->hp > p->maxHp) p->hp = p->maxHp;
-        printf("💚 %s restored %d HP! (HP: %d/%d)\n", skill->name, healAmount, p->hp, p->maxHp);
-    } else {
-        int damage = (rand() % (skill->maxDamage - skill->minDamage + 1)) + skill->minDamage;
-        damage -= (e->defense / 3);
-        if (damage < 10) damage = 10;
-        
-        e->hp -= damage;
-        printf("✨ %s dealt %d damage to %s! ✨\n", skill->name, damage, e->name);
-    }
-}
-
-void useItem(struct Player *p, struct Enemy *e) {
-    int choice;
-    
-    printf("\n📦 INVENTORY:\n");
-    printf("1. Health Potion (+40 HP) - %d left\n", p->inventory[0].quantity);
-    printf("2. Mana Potion (+30 MP) - %d left\n", p->inventory[1].quantity);
-    printf("3. Elixir (Full HP/MP) - %d left\n", p->elixirs);
-    printf("0. Cancel\n");
+    printf("\n=== SELECT CLASS ===\n");
+    printf("1. Warrior  - High HP and Attack\n");
+    printf("2. Mage     - High MP and Magic\n");
+    printf("3. Archer   - Balanced with high crit\n");
+    printf("4. Rogue    - High speed and dodge\n");
+    printf("5. Cleric   - Healing and support\n");
     printf("Choose: ");
     scanf("%d", &choice);
-    clearInputBuffer();
     
-    switch (choice) {
-        case 1:
-            if (p->inventory[0].quantity > 0) {
-                p->hp += 40;
-                if (p->hp > p->maxHp) p->hp = p->maxHp;
-                p->inventory[0].quantity--;
-                printf("💊 Used Health Potion! HP: %d/%d\n", p->hp, p->maxHp);
-            } else {
-                printf("❌ No Health Potions left!\n");
-            }
+    p->class = choice - 1;
+    if (p->class < 0 || p->class > 4) p->class = 0;
+}
+
+void initSkills(Player *p, CharacterClass class) {
+    p->skillCount = 0;
+    
+    switch(class) {
+        case CLASS_WARRIOR:
+            strcpy(p->skills[0].name, "Power Strike");
+            p->skills[0].mpCost = 10;
+            p->skills[0].minDamage = 30;
+            p->skills[0].maxDamage = 50;
+            p->skills[0].requiredLevel = 1;
+            strcpy(p->skills[0].description, "Strong physical attack");
+            p->skills[0].effect = -1;
+            p->skills[0].effectChance = 0;
+            p->skillCount++;
+            
+            strcpy(p->skills[1].name, "Whirlwind");
+            p->skills[1].mpCost = 20;
+            p->skills[1].minDamage = 40;
+            p->skills[1].maxDamage = 70;
+            p->skills[1].requiredLevel = 5;
+            strcpy(p->skills[1].description, "Attack all enemies");
+            p->skillCount++;
             break;
             
-        case 2:
-            if (p->inventory[1].quantity > 0) {
-                p->mp += 30;
-                if (p->mp > p->maxMp) p->mp = p->maxMp;
-                p->inventory[1].quantity--;
-                printf("🔮 Used Mana Potion! MP: %d/%d\n", p->mp, p->maxMp);
-            } else {
-                printf("❌ No Mana Potions left!\n");
-            }
+        case CLASS_MAGE:
+            strcpy(p->skills[0].name, "Fireball");
+            p->skills[0].mpCost = 15;
+            p->skills[0].minDamage = 35;
+            p->skills[0].maxDamage = 55;
+            p->skills[0].requiredLevel = 1;
+            strcpy(p->skills[0].description, "Fire magic with burn");
+            p->skills[0].effect = EFFECT_BURN;
+            p->skills[0].effectChance = 30;
+            p->skillCount++;
+            
+            strcpy(p->skills[1].name, "Ice Storm");
+            p->skills[1].mpCost = 25;
+            p->skills[1].minDamage = 45;
+            p->skills[1].maxDamage = 75;
+            p->skills[1].requiredLevel = 5;
+            strcpy(p->skills[1].description, "Ice magic with freeze");
+            p->skills[1].effect = EFFECT_FREEZE;
+            p->skills[1].effectChance = 40;
+            p->skillCount++;
             break;
             
-        case 3:
-            if (p->elixirs > 0) {
-                p->hp = p->maxHp;
-                p->mp = p->maxMp;
-                p->elixirs--;
-                printf("🌟 Used Elixir! Fully restored! 🌟\n");
-            } else {
-                printf("❌ No Elixirs left!\n");
-            }
-            break;
+        case CLASS_CLERIC:
+            strcpy(p->skills[0].name, "Heal");
+            p->skills[0].mpCost = 12;
+            p->skills[0].minDamage = -40;
+            p->skills[0].maxDamage = -40;
+            p->skills[0].requiredLevel = 1;
+            strcpy(p->skills[0].description, "Restore 40 HP");
+            p->skillCount++;
             
-        case 0:
-            printf("Cancelled.\n");
+            strcpy(p->skills[1].name, "Holy Light");
+            p->skills[1].mpCost = 18;
+            p->skills[1].minDamage = 30;
+            p->skills[1].maxDamage = 50;
+            p->skills[1].requiredLevel = 3;
+            strcpy(p->skills[1].description, "Holy damage to enemies");
+            p->skillCount++;
             break;
             
         default:
-            printf("Invalid choice!\n");
+            strcpy(p->skills[0].name, "Quick Shot");
+            p->skills[0].mpCost = 8;
+            p->skills[0].minDamage = 20;
+            p->skills[0].maxDamage = 40;
+            p->skills[0].requiredLevel = 1;
+            strcpy(p->skills[0].description, "Fast attack");
+            p->skillCount++;
+            break;
     }
 }
 
-void enemyTurn(struct Player *p, struct Enemy *e) {
-    printf("\n💀 %s's turn... 💀\n", e->name);
+void initEquipment(Player *p) {
+    p->weapon = weapons[0];
+    p->armor = armors[0];
+    p->attack += p->weapon.minDamage;
+}
+
+void generateEnemy(Player p, Enemy *e, int dungeonFloor) {
+    const char *normalNames[] = {"Goblin", "Wolf", "Orc", "Skeleton", "Bandit"};
+    const char *eliteNames[] = {"Ogre", "Troll", "Dark Knight", "Vampire"};
+    const char *bossNames[] = {"Dragon", "Lich King", "Demon Lord", "Ancient Titan"};
     
-    int action = rand() % 100;
-    int damage;
-    static int playerDefending = 0;
+    int levelMod = p.level + dungeonFloor;
     
-    // Simple defend flag - in a real implementation, this would be passed
-    // For now, we'll assume player isn't defending (fix this properly)
-    playerDefending = 0;
-    
-    if (e->type == 3) { // Boss AI
-        if (action < 30) {
-            damage = rand() % 25 + e->attack;
-            printf("🔥 %s uses FLAME BREATH! ", e->name);
-        } else if (action < 60) {
-            damage = rand() % 20 + e->attack;
-            printf("⚡ %s uses THUNDER STRIKE! ", e->name);
-        } else {
-            damage = rand() % 15 + e->attack;
-            printf("👊 %s attacks! ", e->name);
-        }
-    } else if (e->type == 2) { // Elite AI
-        if (action < 40) {
-            damage = rand() % 20 + e->attack;
-            printf("⚡ %s uses POWER ATTACK! ", e->name);
-        } else {
-            damage = rand() % 12 + e->attack;
-            printf("👊 %s attacks! ", e->name);
-        }
-    } else { // Normal AI
-        damage = rand() % 10 + e->attack;
-        printf("👊 %s attacks! ", e->name);
+    if (dungeonFloor > 0 && dungeonFloor % 5 == 0) {
+        e->type = 3;
+        strcpy(e->name, bossNames[rand() % 4]);
+        e->maxHp = 200 + (levelMod * 15);
+        e->attack = 25 + (levelMod * 3);
+        e->defense = 15 + (levelMod * 2);
+        e->magic = 20 + (levelMod * 2);
+        e->speed = 10 + (levelMod);
+        e->expReward = 500 + (levelMod * 30);
+        e->goldReward = 300 + (levelMod * 20);
+        e->level = levelMod;
+        e->phase = 1;
+        strcpy(e->specialAbility, "Rage Mode");
+    } else if (rand() % 100 < 20 || dungeonFloor > 0) {
+        e->type = 2;
+        strcpy(e->name, eliteNames[rand() % 4]);
+        e->maxHp = 100 + (levelMod * 10);
+        e->attack = 18 + (levelMod * 2);
+        e->defense = 10 + (levelMod);
+        e->magic = 12 + (levelMod);
+        e->speed = 8 + (levelMod);
+        e->expReward = 150 + (levelMod * 15);
+        e->goldReward = 100 + (levelMod * 10);
+        e->level = levelMod;
+        e->phase = 0;
+        strcpy(e->specialAbility, "Berserk");
+    } else {
+        e->type = 1;
+        strcpy(e->name, normalNames[rand() % 5]);
+        e->maxHp = 50 + (levelMod * 6);
+        e->attack = 10 + (levelMod);
+        e->defense = 5 + (levelMod);
+        e->magic = 5 + (levelMod);
+        e->speed = 5 + (levelMod);
+        e->expReward = 50 + (levelMod * 8);
+        e->goldReward = 30 + (levelMod * 5);
+        e->level = levelMod;
+        e->phase = 0;
+        strcpy(e->specialAbility, "None");
     }
     
-    // Reduce damage if player is defending
-    if (playerDefending) {
-        damage = damage / 2;
-        printf("(Reduced due to defense!) ");
+    e->hp = e->maxHp;
+    e->effectChance = rand() % 30 + 10;
+    e->effect = (rand() % 5);
+}
+
+void battle(Player *p, Enemy *e) {
+    int inBattle = 1;
+    int combo = 0;
+    
+    printf("\n⚔️ BATTLE STARTED! ⚔️\n");
+    printf("%s vs %s (Level %d)\n", p->name, e->name, e->level);
+    if (e->type == 3) printf("⚠️ BOSS ENCOUNTER! ⚠️\n");
+    
+    while (inBattle) {
+        displayStatus(*p, *e);
+        
+        // Speed-based turn order
+        if (p->speed >= e->speed) {
+            playerTurn(p, e);
+            if (e->hp <= 0) break;
+            enemyTurn(p, e);
+        } else {
+            enemyTurn(p, e);
+            if (p->hp <= 0) break;
+            playerTurn(p, e);
+        }
+        
+        if (e->hp <= 0) {
+            printf("\n✨ VICTORY! ✨\n");
+            p->kills++;
+            p->score += 100 * e->type;
+            p->gold += e->goldReward;
+            gainExp(p, e->expReward);
+            randomLoot(p, *e);
+            
+            // Combo bonus
+            if (combo >= 3) {
+                printf("🏆 %d Hit Combo! Bonus gold! 🏆\n", combo);
+                p->gold += combo * 10;
+            }
+            
+            inBattle = 0;
+        }
+        
+        if (p->hp <= 0) {
+            printf("\n💀 DEFEATED! 💀\n");
+            p->hp = p->maxHp / 2;
+            p->gold /= 2;
+            printf("You wake up at the inn. Lost half your gold.\n");
+            inBattle = 0;
+        }
+    }
+}
+
+void displayStatus(Player p, Enemy e) {
+    printf("\n┌─────────────────────────────────────────┐\n");
+    printf("│ %s (Lv.%d) %10s (Lv.%d) │\n", 
+           p.name, p.level, e.name, e.level);
+    printf("│ HP: %3d/%3d  MP: %3d/%3d    HP: %3d/%3d     │\n",
+           p.hp, p.maxHp, p.mp, p.maxMp, e.hp, e.maxHp);
+    printf("│ ATK:%3d DEF:%3d MAG:%3d   ATK:%3d DEF:%3d │\n",
+           p.attack, p.defense, p.magic, e.attack, e.defense);
+    printf("└─────────────────────────────────────────┘\n");
+}
+
+void playerTurn(Player *p, Enemy *e) {
+    int choice;
+    static int combo = 0;
+    
+    printf("\n1. ⚔ Attack  2. ✨ Skill  3. 💊 Item  4. 🛡 Defend  5. 🏃 Flee\n");
+    printf("Choice: ");
+    scanf("%d", &choice);
+    
+    switch(choice) {
+        case 1: {
+            int damage = rand() % 20 + p->attack - e->defense/2;
+            if (damage < 5) damage = 5;
+            
+            calculateCritical(*p, &damage);
+            
+            e->hp -= damage;
+            printf("You deal %d damage!\n", damage);
+            combo++;
+            comboSystem(&combo, damage);
+            break;
+        }
+        case 2:
+            useSkill(p, e);
+            combo = 0;
+            break;
+        case 3:
+            useItem(p, e);
+            combo = 0;
+            break;
+        case 4:
+            printf("Defense increased for next turn!\n");
+            p->defense += 5;
+            combo = 0;
+            break;
+        case 5:
+            if (rand() % 2 == 0) {
+                printf("You escaped!\n");
+                e->hp = 0;
+            } else {
+                printf("Failed to escape!\n");
+            }
+            combo = 0;
+            break;
+    }
+}
+
+void enemyTurn(Player *p, Enemy *e) {
+    printf("\n💀 %s attacks! 💀\n", e->name);
+    
+    int damage = rand() % 15 + e->attack - p->defense/3;
+    if (damage < 5) damage = 5;
+    
+    // Enemy special abilities
+    if (e->type == 3 && e->hp < e->maxHp/2 && e->phase == 1) {
+        printf("🔥 %s enters RAGE MODE! 🔥\n", e->name);
+        damage *= 2;
+        e->phase = 2;
     }
     
-    // Apply player defense reduction
-    damage -= (p->defense / 3);
-    if (damage < 3) damage = 3;
+    if (rand() % 100 < e->effectChance) {
+        printf("⚠️ %s inflicts a status effect! ⚠️\n", e->name);
+        applyStatusEffect(p, e->effect, 3);
+    }
     
     p->hp -= damage;
-    if (p->hp < 0) p->hp = 0;
-    printf("Dealt %d damage! 💔\n", damage);
+    printf("%s deals %d damage to you!\n", e->name, damage);
+    
+    // Apply active effects
+    if (p->effectDuration > 0) {
+        switch(p->activeEffect) {
+            case EFFECT_POISON:
+                p->hp -= 5;
+                printf("☠️ Poison deals 5 damage! ☠️\n");
+                break;
+            case EFFECT_BURN:
+                p->hp -= 8;
+                printf("🔥 Burn deals 8 damage! 🔥\n");
+                break;
+        }
+        p->effectDuration--;
+    }
 }
 
-// ---------------- PROGRESSION ----------------
-void gainExp(struct Player *p, int exp) {
+void useSkill(Player *p, Enemy *e) {
+    printf("\n=== SKILLS ===\n");
+    for (int i = 0; i < p->skillCount; i++) {
+        if (p->level >= p->skills[i].requiredLevel) {
+            printf("%d. %s (MP: %d) - %s\n", i+1, p->skills[i].name, 
+                   p->skills[i].mpCost, p->skills[i].description);
+        }
+    }
+    printf("0. Cancel\nChoice: ");
+    
+    int choice;
+    scanf("%d", &choice);
+    if (choice == 0) return;
+    
+    choice--;
+    if (choice >= 0 && choice < p->skillCount && p->level >= p->skills[choice].requiredLevel) {
+        if (p->mp >= p->skills[choice].mpCost) {
+            p->mp -= p->skills[choice].mpCost;
+            
+            if (p->skills[choice].minDamage < 0) {
+                p->hp -= p->skills[choice].minDamage;
+                if (p->hp > p->maxHp) p->hp = p->maxHp;
+                printf("💚 Restored %d HP!\n", -p->skills[choice].minDamage);
+            } else {
+                int damage = rand() % (p->skills[choice].maxDamage - p->skills[choice].minDamage + 1)
+                           + p->skills[choice].minDamage + p->magic;
+                damage -= e->defense/2;
+                if (damage < 10) damage = 10;
+                
+                e->hp -= damage;
+                printf("✨ %s deals %d damage! ✨\n", p->skills[choice].name, damage);
+                
+                // Apply status effect
+                if (rand() % 100 < p->skills[choice].effectChance) {
+                    printf("⚠️ Status effect applied! ⚠️\n");
+                    applyStatusEffect(e, p->skills[choice].effect, 3);
+                }
+            }
+        } else {
+            printf("Not enough MP!\n");
+        }
+    }
+}
+
+void useItem(Player *p, Enemy *e) {
+    printf("\n=== ITEMS ===\n");
+    for (int i = 0; i < p->inventoryCount; i++) {
+        printf("%d. %s x%d (%s)\n", i+1, p->inventory[i].name, 
+               p->inventory[i].quantity, p->inventory[i].type);
+    }
+    printf("0. Cancel\nChoice: ");
+    
+    int choice;
+    scanf("%d", &choice);
+    if (choice == 0) return;
+    
+    choice--;
+    if (choice >= 0 && choice < p->inventoryCount && p->inventory[choice].quantity > 0) {
+        if (strcmp(p->inventory[choice].type, "healing") == 0) {
+            p->hp += p->inventory[choice].effect;
+            if (p->hp > p->maxHp) p->hp = p->maxHp;
+            printf("💊 Used %s! HP: %d/%d\n", p->inventory[choice].name, p->hp, p->maxHp);
+        } else if (strcmp(p->inventory[choice].type, "mana") == 0) {
+            p->mp += p->inventory[choice].effect;
+            if (p->mp > p->maxMp) p->mp = p->maxMp;
+            printf("🔮 Used %s! MP: %d/%d\n", p->inventory[choice].name, p->mp, p->maxMp);
+        }
+        p->inventory[choice].quantity--;
+        if (p->inventory[choice].quantity == 0) {
+            for (int i = choice; i < p->inventoryCount - 1; i++) {
+                p->inventory[i] = p->inventory[i+1];
+            }
+            p->inventoryCount--;
+        }
+    }
+}
+
+void gainExp(Player *p, int exp) {
     p->exp += exp;
-    printf("📈 Gained %d EXP! 📈\n", exp);
+    printf("📈 Gained %d EXP!\n", exp);
     
     while (p->exp >= p->expToNext) {
         p->exp -= p->expToNext;
@@ -524,196 +814,434 @@ void gainExp(struct Player *p, int exp) {
     }
 }
 
-void levelUp(struct Player *p) {
+void levelUp(Player *p) {
     p->level++;
-    p->maxHp += 20;
-    p->maxMp += 15;
-    p->attack += 5;
-    p->defense += 3;
+    p->maxHp += classTemplates[p->class].hpBonus;
+    p->maxMp += classTemplates[p->class].mpBonus;
+    p->attack += 3;
+    p->defense += 2;
+    p->magic += 2;
+    p->speed += 1;
     p->expToNext = (int)(p->expToNext * 1.2);
-    if (p->expToNext < 100) p->expToNext = 100;
     
-    // Full restore on level up
     p->hp = p->maxHp;
     p->mp = p->maxMp;
     
-    printf("\n🎉🎉🎉 LEVEL UP! Now Level %d! 🎉🎉🎉\n", p->level);
-    printf("❤️ HP: %d -> %d\n", p->maxHp - 20, p->maxHp);
-    printf("💙 MP: %d -> %d\n", p->maxMp - 15, p->maxMp);
-    printf("⚔ Attack: %d -> %d\n", p->attack - 5, p->attack);
-    printf("🛡 Defense: %d -> %d\n", p->defense - 3, p->defense);
+    printf("\n🎉 LEVEL UP! Now Level %d! 🎉\n", p->level);
+    printf("HP: %d | MP: %d | ATK: %d | DEF: %d | MAG: %d\n",
+           p->maxHp, p->maxMp, p->attack, p->defense, p->magic);
+}
+
+void shop(Player *p) {
+    int choice;
+    printf("\n🏪 MARKET DISTRICT 🏪\n");
+    printf("Gold: %d\n\n", p->gold);
+    printf("1. Health Potion   - 30g (Heal 50)\n");
+    printf("2. Mana Potion     - 25g (Restore 30 MP)\n");
+    printf("3. Strength Potion - 80g (+5 ATK)\n");
+    printf("4. Defense Potion  - 80g (+5 DEF)\n");
+    printf("5. Elixir         - 150g (Full restore)\n");
+    printf("0. Leave\nChoice: ");
+    scanf("%d", &choice);
     
-    // Bonus items on level up
-    if (p->level % 3 == 0) {
-        p->inventory[0].quantity++;
-        printf("🎁 Bonus: Health Potion x1 added to inventory!\n");
+    switch(choice) {
+        case 1:
+            if (p->gold >= 30) {
+                Item potion = {"Health Potion", 50, 1, 99, "healing"};
+                p->inventory[p->inventoryCount++] = potion;
+                p->gold -= 30;
+                printf("Purchased!\n");
+            }
+            break;
+        case 2:
+            if (p->gold >= 25) {
+                Item potion = {"Mana Potion", 30, 1, 99, "mana"};
+                p->inventory[p->inventoryCount++] = potion;
+                p->gold -= 25;
+                printf("Purchased!\n");
+            }
+            break;
+        case 3:
+            if (p->gold >= 80) {
+                p->attack += 5;
+                p->gold -= 80;
+                printf("ATK increased to %d!\n", p->attack);
+            }
+            break;
+        case 4:
+            if (p->gold >= 80) {
+                p->defense += 5;
+                p->gold -= 80;
+                printf("DEF increased to %d!\n", p->defense);
+            }
+            break;
+        case 5:
+            if (p->gold >= 150) {
+                p->hp = p->maxHp;
+                p->mp = p->maxMp;
+                p->gold -= 150;
+                printf("Fully restored!\n");
+            }
+            break;
     }
 }
 
-int checkGameOver(struct Player p) {
-    if (p.hp <= 0) {
-        printf("\n💀💀💀 %s has been defeated! 💀💀💀\n", p.name);
+void blacksmith(Player *p) {
+    int choice;
+    printf("\n⚒️ BLACKSMITH ⚒️\n");
+    printf("Gold: %d\n\n", p->gold);
+    printf("Current Weapon: %s (%s)\n", p->weapon.name, p->weapon.rarity);
+    printf("Current Armor: %s (%s)\n\n", p->armor.name, p->armor.rarity);
+    
+    printf("Available Upgrades:\n");
+    printf("1. Upgrade Weapon - %d gold\n", 200 * p->level);
+    printf("2. Upgrade Armor  - %d gold\n", 150 * p->level);
+    printf("3. Craft Item     - 100 gold\n");
+    printf("0. Leave\nChoice: ");
+    scanf("%d", &choice);
+    
+    switch(choice) {
+        case 1:
+            if (p->gold >= 200 * p->level) {
+                p->weapon.minDamage += 5;
+                p->weapon.maxDamage += 10;
+                p->gold -= 200 * p->level;
+                printf("Weapon upgraded! %s now deals %d-%d damage\n",
+                       p->weapon.name, p->weapon.minDamage, p->weapon.maxDamage);
+            } else {
+                printf("Not enough gold!\n");
+            }
+            break;
+        case 2:
+            if (p->gold >= 150 * p->level) {
+                p->armor.defense += 3;
+                p->gold -= 150 * p->level;
+                printf("Armor upgraded! Defense: %d\n", p->armor.defense);
+            } else {
+                printf("Not enough gold!\n");
+            }
+            break;
+        case 3:
+            craftItem(p);
+            break;
+    }
+}
+
+void craftItem(Player *p) {
+    printf("\n🔨 CRAFTING 🔨\n");
+    printf("1. Health Potion (50g)\n");
+    printf("2. Mana Potion (40g)\n");
+    printf("3. Bomb (80g) - Deals 50 damage to enemy\n");
+    printf("Choice: ");
+    
+    int choice;
+    scanf("%d", &choice);
+    
+    int cost = 0;
+    char itemName[30];
+    int effect = 0;
+    
+    switch(choice) {
+        case 1:
+            cost = 50;
+            strcpy(itemName, "Health Potion");
+            effect = 50;
+            break;
+        case 2:
+            cost = 40;
+            strcpy(itemName, "Mana Potion");
+            effect = 30;
+            break;
+        case 3:
+            cost = 80;
+            strcpy(itemName, "Bomb");
+            effect = 50;
+            break;
+        default:
+            return;
+    }
+    
+    if (p->gold >= cost) {
+        Item newItem = {itemName, effect, 1, 99, choice == 3 ? "bomb" : (choice == 1 ? "healing" : "mana")};
+        p->inventory[p->inventoryCount++] = newItem;
+        p->gold -= cost;
+        printf("Crafted %s!\n", itemName);
+    } else {
+        printf("Not enough gold!\n");
+    }
+}
+
+void questGiver(Player *p, Quest *quests) {
+    printf("\n❓ QUEST BOARD ❓\n");
+    for (int i = 0; i < MAX_QUESTS; i++) {
+        if (quests[i].status != QUEST_COMPLETED) {
+            printf("%d. %s - %s (%d/%d)\n", i+1, quests[i].name, 
+                   quests[i].description, quests[i].currentProgress, quests[i].requiredProgress);
+            if (quests[i].currentProgress >= quests[i].requiredProgress) {
+                quests[i].status = QUEST_COMPLETED;
+                printf("   ✅ QUEST COMPLETED! Claim reward\n");
+            }
+        }
+    }
+    
+    for (int i = 0; i < MAX_QUESTS; i++) {
+        if (quests[i].status == QUEST_COMPLETED) {
+            printf("\nClaim reward for %s? (1=Yes): ", quests[i].name);
+            int claim;
+            scanf("%d", &claim);
+            if (claim == 1) {
+                p->exp += quests[i].rewardExp;
+                p->gold += quests[i].rewardGold;
+                printf("Reward: %d EXP, %d Gold\n", quests[i].rewardExp, quests[i].rewardGold);
+                quests[i].status = QUEST_FAILED; // Mark as claimed
+            }
+        }
+    }
+}
+
+void exploreWorld(Player *p) {
+    printf("\n🌍 EXPLORING THE WORLD 🌍\n");
+    printf("You venture into the wilderness...\n");
+    
+    int encounter = rand() % 3;
+    
+    switch(encounter) {
+        case 0: {
+            printf("You find a treasure chest!\n");
+            int goldFound = rand() % 100 + 50;
+            p->gold += goldFound;
+            printf("Found %d gold!\n", goldFound);
+            break;
+        }
+        case 1: {
+            printf("You discover a healing spring!\n");
+            p->hp = p->maxHp;
+            p->mp = p->maxMp;
+            printf("HP and MP fully restored!\n");
+            break;
+        }
+        case 2: {
+            printf("An enemy ambushes you!\n");
+            Enemy enemy;
+            generateEnemy(*p, &enemy, 0);
+            battle(p, &enemy);
+            break;
+        }
+    }
+}
+
+void enterDungeon(Player *p) {
+    static int currentFloor = 1;
+    Enemy boss;
+    
+    printf("\n🏰 DUNGEON CRAWL 🏰\n");
+    printf("Current Floor: %d\n", currentFloor);
+    printf("1. Continue to next floor\n");
+    printf("2. Return to town\n");
+    printf("Choice: ");
+    
+    int choice;
+    scanf("%d", &choice);
+    
+    if (choice == 2) {
+        currentFloor = 1;
+        return;
+    }
+    
+    printf("\nEntering Floor %d...\n", currentFloor);
+    
+    // Generate enemies for this floor
+    int enemiesToFight = (currentFloor / 5) + 1;
+    if (enemiesToFight > 3) enemiesToFight = 3;
+    
+    for (int i = 0; i < enemiesToFight; i++) {
+        Enemy enemy;
+        generateEnemy(*p, &enemy, currentFloor);
+        battle(p, &enemy);
+        if (p->hp <= 0) {
+            currentFloor = 1;
+            return;
+        }
+    }
+    
+    // Boss every 5 floors
+    if (currentFloor % 5 == 0) {
+        printf("\n⚠️ FLOOR %d BOSS ENCOUNTER! ⚠️\n", currentFloor);
+        generateEnemy(*p, &boss, currentFloor);
+        battle(p, &boss);
+        if (p->hp > 0) {
+            printf("🎉 FLOOR %d CLEARED! 🎉\n", currentFloor);
+            p->score += 500;
+        } else {
+            currentFloor = 1;
+            return;
+        }
+    }
+    
+    currentFloor++;
+    printf("Proceeding to next floor...\n");
+}
+
+void arena(Player *p) {
+    printf("\n🏟️ ARENA MODE 🏟️\n");
+    printf("Fight consecutive battles for rewards!\n");
+    printf("Entry Fee: 100 gold\n");
+    
+    if (p->gold < 100) {
+        printf("Not enough gold!\n");
+        return;
+    }
+    
+    p->gold -= 100;
+    int wins = 0;
+    
+    for (int round = 1; round <= 5; round++) {
+        printf("\n=== ARENA ROUND %d ===\n", round);
+        Enemy enemy;
+        generateEnemy(*p, &enemy, round);
+        battle(p, &enemy);
+        
+        if (p->hp <= 0) {
+            printf("Arena run ends at round %d!\n", round);
+            break;
+        }
+        
+        wins++;
+    }
+    
+    int reward = wins * 200;
+    p->gold += reward;
+    printf("\nArena Complete! %d wins!\n", wins);
+    printf("Reward: %d gold\n", reward);
+}
+
+void randomLoot(Player *p, Enemy e) {
+    int lootChance = rand() % 100;
+    
+    if (e.type == 3) lootChance += 30;
+    
+    if (lootChance > 70) {
+        printf("🎁 Rare item found! 🎁\n");
+        
+        int itemType = rand() % 3;
+        Item rareItem;
+        
+        switch(itemType) {
+            case 0:
+                rareItem = (Item){"Rare Health Potion", 100, 1, 99, "healing"};
+                break;
+            case 1:
+                rareItem = (Item){"Mana Elixir", 80, 1, 99, "mana"};
+                break;
+            case 2:
+                rareItem = (Item){"Strength Elixir", 10, 1, 99, "buff"};
+                break;
+        }
+        
+        p->inventory[p->inventoryCount++] = rareItem;
+        printf("Found: %s!\n", rareItem.name);
+    }
+}
+
+void applyStatusEffect(Player *p, StatusEffect effect, int duration) {
+    p->activeEffect = effect;
+    p->effectDuration = duration;
+    
+    switch(effect) {
+        case EFFECT_POISON:
+            printf("You've been poisoned!\n");
+            break;
+        case EFFECT_BURN:
+            printf("You're on fire!\n");
+            break;
+        case EFFECT_FREEZE:
+            printf("You're frozen! Speed reduced!\n");
+            p->speed /= 2;
+            break;
+        case EFFECT_STUN:
+            printf("You're stunned!\n");
+            break;
+        default:
+            break;
+    }
+}
+
+void updateWorldTime(WorldTime *wt) {
+    wt->minute += 10;
+    if (wt->minute >= 60) {
+        wt->minute = 0;
+        wt->hour++;
+        if (wt->hour >= 24) {
+            wt->hour = 0;
+            wt->day++;
+        }
+    }
+    
+    // Weather change
+    if (rand() % 100 < 5) {
+        const char *weathers[] = {"Sunny", "Rainy", "Stormy", "Snowy"};
+        strcpy(wt->weather, weathers[rand() % 4]);
+    }
+}
+
+void displayWorldInfo(WorldTime wt) {
+    printf("\n📅 Day %d | %02d:%02d | %s ☁️\n", 
+           wt.day, wt.hour, wt.minute, wt.weather);
+}
+
+void saveGame(Player p, int slot) {
+    char filename[20];
+    sprintf(filename, "save%d.dat", slot);
+    FILE *file = fopen(filename, "wb");
+    if (file) {
+        fwrite(&p, sizeof(Player), 1, file);
+        fclose(file);
+        printf("Game saved to slot %d!\n", slot);
+    } else {
+        printf("Save failed!\n");
+    }
+}
+
+int loadGame(Player *p, int slot) {
+    char filename[20];
+    sprintf(filename, "save%d.dat", slot);
+    FILE *file = fopen(filename, "rb");
+    if (file) {
+        fread(p, sizeof(Player), 1, file);
+        fclose(file);
         return 1;
     }
     return 0;
 }
 
-// ---------------- ENEMY GENERATION ----------------
-void generateEnemy(struct Player p, struct Enemy *e) {
-    const char *normalNames[] = {"Goblin", "Wolf", "Orc", "Skeleton", "Bandit", "Dark Mage"};
-    const char *eliteNames[] = {"Ogre", "Troll", "Dark Knight", "Vampire", "Demon"};
-    const char *bossNames[] = {"Dragon", "Lich King", "Demon Lord", "Ancient Titan", "Void Walker"};
+void displayAchievements(Achievement *achievements, Player p) {
+    printf("\n🏆 ACHIEVEMENTS 🏆\n");
+    printf("Kills: %d\n", p.kills);
+    printf("Level: %d\n", p.level);
+    printf("Score: %d\n", p.score);
     
-    int random = rand() % 100;
-    
-    // Boss every 5 levels, Elite sometimes in between
-    if (p.level % 5 == 0) {
-        e->type = 3;
-        strcpy(e->name, bossNames[rand() % 5]);
-        e->maxHp = 150 + (p.level * 15);
-        e->attack = 20 + (p.level * 3);
-        e->defense = 10 + (p.level * 2);
-        e->expReward = 200 + (p.level * 20);
-        e->goldReward = 150 + (p.level * 15);
-        printf("\n👑👑👑 BOSS ENCOUNTER: %s! 👑👑👑\n", e->name);
-    } else if (random < 20) { // 20% chance for elite
-        e->type = 2;
-        strcpy(e->name, eliteNames[rand() % 5]);
-        e->maxHp = 80 + (p.level * 12);
-        e->attack = 15 + (p.level * 2);
-        e->defense = 8 + (p.level * 1);
-        e->expReward = 80 + (p.level * 10);
-        e->goldReward = 60 + (p.level * 8);
-        printf("\n⚔ Elite Enemy: %s appears! ⚔\n", e->name);
+    if (p.kills >= 10) printf("✅ Bronze Slayer - 10 kills\n");
+    if (p.kills >= 50) printf("✅ Silver Slayer - 50 kills\n");
+    if (p.kills >= 100) printf("✅ Gold Slayer - 100 kills\n");
+    if (p.level >= 10) printf("✅ Veteran - Reach level 10\n");
+    if (p.level >= 20) printf("✅ Elite - Reach level 20\n");
+    if (p.gold >= 1000) printf("✅ Rich - Have 1000 gold\n");
+}
+
+void comboSystem(int *combo, int damage) {
+    if (damage > 30) {
+        (*combo)++;
+        if (*combo >= 3) {
+            printf("🔥 %d HIT COMBO! 🔥\n", *combo);
+        }
     } else {
-        e->type = 1;
-        strcpy(e->name, normalNames[rand() % 6]);
-        e->maxHp = 50 + (p.level * 8);
-        e->attack = 10 + (p.level * 1);
-        e->defense = 5 + (p.level * 1);
-        e->expReward = 40 + (p.level * 5);
-        e->goldReward = 30 + (p.level * 4);
-        printf("\n👾 %s appears! 👾\n", e->name);
-    }
-    
-    e->hp = e->maxHp;
-}
-
-// ---------------- SHOP ----------------
-void shop(struct Player *p) {
-    int choice;
-    
-    printf("\n🏪━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🏪\n");
-    printf("               ITEM SHOP\n");
-    printf("🏪━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━🏪\n");
-    printf("Your gold: %d 💰\n\n", p->gold);
-    printf("1. Health Potion   - 30 gold  (+40 HP) [Owned: %d]\n", p->inventory[0].quantity);
-    printf("2. Mana Potion     - 25 gold  (+30 MP) [Owned: %d]\n", p->inventory[1].quantity);
-    printf("3. Elixir          - 80 gold  (Full restore) [Owned: %d]\n", p->elixirs);
-    printf("4. Strength Potion - 50 gold  (+5 ATK permanent)\n");
-    printf("5. Defense Potion  - 50 gold  (+3 DEF permanent)\n");
-    printf("0. Leave\n");
-    printf("Choose: ");
-    scanf("%d", &choice);
-    clearInputBuffer();
-    
-    switch (choice) {
-        case 1:
-            if (p->gold >= 30) {
-                p->inventory[0].quantity++;
-                p->gold -= 30;
-                printf("✅ Bought Health Potion! Now have %d\n", p->inventory[0].quantity);
-            } else {
-                printf("❌ Not enough gold! Need 30, have %d\n", p->gold);
-            }
-            break;
-            
-        case 2:
-            if (p->gold >= 25) {
-                p->inventory[1].quantity++;
-                p->gold -= 25;
-                printf("✅ Bought Mana Potion! Now have %d\n", p->inventory[1].quantity);
-            } else {
-                printf("❌ Not enough gold! Need 25, have %d\n", p->gold);
-            }
-            break;
-            
-        case 3:
-            if (p->gold >= 80) {
-                p->elixirs++;
-                p->gold -= 80;
-                printf("✅ Bought Elixir! Now have %d\n", p->elixirs);
-            } else {
-                printf("❌ Not enough gold! Need 80, have %d\n", p->gold);
-            }
-            break;
-            
-        case 4:
-            if (p->gold >= 50) {
-                p->attack += 5;
-                p->gold -= 50;
-                printf("✅ Used Strength Potion! ATK is now %d\n", p->attack);
-            } else {
-                printf("❌ Not enough gold! Need 50, have %d\n", p->gold);
-            }
-            break;
-            
-        case 5:
-            if (p->gold >= 50) {
-                p->defense += 3;
-                p->gold -= 50;
-                printf("✅ Used Defense Potion! DEF is now %d\n", p->defense);
-            } else {
-                printf("❌ Not enough gold! Need 50, have %d\n", p->gold);
-            }
-            break;
-            
-        case 0:
-            printf("Thanks for visiting!\n");
-            break;
-            
-        default:
-            printf("Invalid choice!\n");
+        *combo = 0;
     }
 }
 
-// ---------------- SAVE/LOAD ----------------
-void saveGame(struct Player p) {
-    FILE *file = fopen("savegame.dat", "wb");
-    if (file == NULL) {
-        printf("❌ Failed to save game!\n");
-        return;
+void calculateCritical(Player p, int *damage) {
+    if (rand() % 100 < p.critChance) {
+        *damage *= 2;
+        printf("💥 CRITICAL HIT! 💥\n");
     }
-    
-    fwrite(&p, sizeof(struct Player), 1, file);
-    fclose(file);
-    printf("💾 Game saved successfully! 💾\n");
-}
-
-int loadGame(struct Player *p) {
-    FILE *file = fopen("savegame.dat", "rb");
-    if (file == NULL) {
-        printf("No save file found.\n");
-        return 0;
-    }
-    
-    fread(p, sizeof(struct Player), 1, file);
-    fclose(file);
-    return 1;
-}
-
-// ---------------- HELP ----------------
-void displayHelp() {
-    printf("\n╔════════════════════════════════════════════╗\n");
-    printf("║              GAME TIPS & INFO              ║\n");
-    printf("╠════════════════════════════════════════════╣\n");
-    printf("║ • Defending reduces incoming damage by 50%% ║\n");
-    printf("║ • Bosses appear every 5 levels!           ║\n");
-    printf("║ • Save your game regularly!               ║\n");
-    printf("║ • Use Elixirs wisely (full restore)       ║\n");
-    printf("║ • Different enemies have different AI     ║\n");
-    printf("║ • Level up gives full HP/MP recovery!     ║\n");
-    printf("║ • Shop items can permanently boost stats  ║\n");
-    printf("║ • Critical hits do 2x damage!             ║\n");
-    printf("╚════════════════════════════════════════════╝\n");
 }
