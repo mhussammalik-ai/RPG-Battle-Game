@@ -1,10 +1,3 @@
-/*
- * ============================================================
- * STARZILLA RPG v2.0 - Anime Edition
- * Compile with: gcc -o starzilla_rpg starzilla_rpg.c -Wall
- * ============================================================
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
