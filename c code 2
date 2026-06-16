@@ -1,19 +1,48 @@
+/*
+ * ============================================================
+ * STARZILLA RPG v2.0 - Anime Edition
+ * Compile with: gcc -o starzilla_rpg starzilla_rpg.c -Wall
+ * ============================================================
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 
+/* ================= DEFINITIONS ================= */
 #define MAX_NAME 32
 #define MAX_INV  20
-#define MAX_SKILLS 5
-#define MAX_EQUIP 5  /* Weapon, Armor, Helmet, Shield, Ring */
+#define MAX_SKILLS 10
+#define MAX_EQUIP 5
+#define MAX_SAVE_SLOTS 3
 
 /* ================= ENUMS ================= */
-typedef enum { CLASS_WARRIOR, CLASS_MAGE, CLASS_ARCHER, CLASS_ASSASSIN, CLASS_PALADIN, CLASS_NECROMANCER } ClassType;
-typedef enum { RARITY_COMMON, RARITY_UNCOMMON, RARITY_RARE, RARITY_EPIC, RARITY_LEGENDARY, RARITY_MYTHIC } Rarity;
-typedef enum { ELEM_NONE, ELEM_FIRE, ELEM_ICE, ELEM_LIGHTNING } Element;
-typedef enum { STATUS_NONE, STATUS_BURN, STATUS_POISON, STATUS_FREEZE, STATUS_STUN } StatusEffect;
-typedef enum { SLOT_WEAPON, SLOT_ARMOR, SLOT_HELMET, SLOT_SHIELD, SLOT_RING } EquipSlot;
+typedef enum { 
+    CLASS_WARRIOR, CLASS_MAGE, CLASS_ARCHER,
+    CLASS_ASSASSIN, CLASS_PALADIN, CLASS_NECROMANCER 
+} ClassType;
+
+typedef enum { 
+    RARITY_COMMON, RARITY_UNCOMMON, RARITY_RARE,
+    RARITY_EPIC, RARITY_LEGENDARY, RARITY_MYTHIC 
+} Rarity;
+
+typedef enum { 
+    ELEM_NONE, ELEM_FIRE, ELEM_ICE, ELEM_LIGHTNING,
+    ELEM_WATER, ELEM_WIND, ELEM_EARTH, ELEM_DARK, ELEM_LIGHT 
+} Element;
+
+typedef enum { 
+    STATUS_NONE, STATUS_BURN, STATUS_POISON, STATUS_FREEZE,
+    STATUS_STUN, STATUS_BLEED, STATUS_SILENCE, STATUS_FEAR,
+    STATUS_PARALYSIS, STATUS_SLEEP, STATUS_CONFUSION, STATUS_CURSE 
+} StatusEffect;
+
+typedef enum { 
+    SLOT_WEAPON, SLOT_ARMOR, SLOT_HELMET, SLOT_SHIELD, SLOT_RING 
+} EquipSlot;
 
 /* ================= STRUCTS ================= */
 typedef struct {
@@ -27,6 +56,7 @@ typedef struct {
     char name[MAX_NAME];
     int quantity;
     int heal_amount;
+    int restore_mp;
 } Item;
 
 typedef struct {
@@ -37,7 +67,6 @@ typedef struct {
     int def_bonus;
     int hp_bonus;
     int mp_bonus;
-    int equipped; /* 1 if currently worn */
 } Equipment;
 
 typedef struct {
@@ -55,17 +84,25 @@ typedef struct {
     int agility;
     int intelligence;
     int luck;
+    int stamina;
+    int critical_rate;
+    int critical_damage;
+    int dodge_chance;
+    int block_chance;
     Skill skills[MAX_SKILLS];
     int skill_count;
     Item inventory[MAX_INV];
     int item_count;
-    Equipment equipment[MAX_EQUIP]; /* index = slot */
-    int has_equipment[MAX_EQUIP];   /* 1 if slot occupied */
+    Equipment equipment[MAX_EQUIP];
+    int has_equipment[MAX_EQUIP];
     int kills;
     int damage_dealt;
     int damage_taken;
-    int dodge_chance;   /* base % */
-    int block_chance;   /* base % */
+    int bosses_defeated;
+    int total_gold_earned;
+    int combos;
+    int highest_combo;
+    int achievements[20];
 } Player;
 
 typedef struct {
@@ -77,58 +114,179 @@ typedef struct {
     int gold_reward;
     int is_boss;
     int is_elite;
-    Element resist; /* element this enemy resists */
+    Element resist;
+    Element weakness;
     StatusEffect status;
     int status_turns;
 } Enemy;
 
-/* ================= RANDOM ================= */
+/* ================= ANIME QUOTES ================= */
+const char* anime_quotes[] = {
+    "Believe in the me that believes in you! - Gurren Lagann",
+    "I'll take a potato chip... and EAT IT! - Death Note",
+    "The world isn't perfect, but it's there for us. - Fullmetal Alchemist",
+    "If you don't like your destiny, don't accept it. - Naruto",
+    "I am the bone of my sword. - Fate/stay night",
+    "People die when they are killed. - Fate/stay night",
+    "I will keep moving forward. - Attack on Titan",
+    "I'll never forgive you! - Demon Slayer",
+    "Believe in yourself and create your own destiny. - Naruto",
+    "The only thing we can do is believe. - One Piece",
+    "I want to live! - One Piece",
+    "I'll protect my friends! - Fairy Tail",
+    "Never give up! - Dragon Ball Z",
+    "My ninja way! - Naruto",
+    "I'm going to be King of the Pirates! - One Piece"
+};
+
+/* ================= FUNCTION DECLARATIONS ================= */
+int r(int a, int b);
+int roll_damage(int base);
+const char* element_name(Element e);
+const char* status_name(StatusEffect s);
+const char* rarity_name(Rarity r);
+const char* slot_name(EquipSlot s);
+void show_anime_quote(void);
+void clear_input_buffer(void);
+
+const char* class_name(ClassType c);
+ClassType choose_class(void);
+void init_player(Player *p, const char *name, ClassType cls);
+void add_skill(Player *p, const char *name, int power, int mp_cost, Element elem);
+void add_item(Player *p, const char *name, int qty, int heal, int mp_restore);
+int total_attack(Player *p);
+int total_defense(Player *p);
+int total_max_hp(Player *p);
+int total_max_mp(Player *p);
+void print_status(Player *p);
+void print_equipment(Player *p);
+void print_inventory(Player *p);
+void print_skills(Player *p);
+void show_stats(Player *p);
+void level_up(Player *p);
+void gain_exp(Player *p, int amount);
+
+void init_enemy(Enemy *e, const char *name, int hp, int atk, int def,
+                int exp, int gold, int is_boss, int is_elite, 
+                Element resist, Element weakness);
+Enemy create_enemy(Player *p, int map);
+void apply_status_from_element(Enemy *e, Element elem);
+int process_enemy_status(Enemy *e);
+
+int is_critical(Player *p);
+int calc_damage(int attack, int defense);
+int try_dodge(Player *p);
+int try_block(Player *p);
+void player_attack(Player *p, Enemy *e);
+void player_use_skill(Player *p, Enemy *e, int skill_index);
+void enemy_attack(Enemy *e, Player *p);
+int battle(Player *p, int map);
+
+void save_game_slot(Player *p, int map, int slot);
+int load_game_slot(Player *p, int *map, int slot);
+void list_save_slots(void);
+
+void show_rules(void);
+int choose_map(void);
+void show_game_over(Player *p);
+int get_valid_input(int min, int max);
+
+/* ================= UTILITY IMPLEMENTATIONS ================= */
 int r(int a, int b) {
     return a + rand() % (b - a + 1);
 }
+
 int roll_damage(int base) {
     int variance = base / 4;
     if (variance < 1) variance = 1;
     return base + (rand() % (2 * variance + 1)) - variance;
 }
 
-/* ================= RULES ================= */
-void show_rules(void) {
-    printf("\n========== GAME RULES ==========\n");
-    printf("1. Choose a class, then a map\n");
-    printf("2. Fight enemies and bosses\n");
-    printf("3. Gain EXP to level up\n");
-    printf("4. Boss appears every 5 levels\n");
-    printf("5. Skills use MP and may have elements\n");
-    printf("6. Use items or equipment to survive\n");
-    printf("7. Dodge/Block can save you from damage\n");
-    printf("8. Status effects: Burn, Poison, Freeze, Stun\n");
-    printf("9. HP = 0 means Game Over\n");
-    printf("================================\n");
+void clear_input_buffer(void) {
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF) {}
 }
 
-/* ================= MAP ================= */
-int choose_map(void) {
-    int m;
-    printf("\n========== MAP SELECT ==========\n");
-    printf("1. Forest\n");
-    printf("2. Dungeon\n");
-    printf("3. Dark Zone\n");
-    printf("4. Chaos World\n");
-    printf("Choose: ");
-    if (scanf("%d", &m) != 1) {
-        while (getchar() != '\n');
-        return 1;
+int get_valid_input(int min, int max) {
+    int input;
+    char buffer[100];
+    while (1) {
+        if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
+            if (sscanf(buffer, "%d", &input) == 1) {
+                if (input >= min && input <= max) {
+                    return input;
+                }
+            }
+        }
+        printf("Invalid input! Please enter a number between %d and %d: ", min, max);
     }
-    if (m < 1 || m > 4) m = 1;
-    const char *names[] = {"", "Forest", "Dungeon", "Dark Zone", "Chaos World"};
-    printf("\nSelected Map: %s\n", names[m]);
-    return m;
 }
 
-/* ================= CLASS SELECT ================= */
+void show_anime_quote(void) {
+    int quote_index = r(0, sizeof(anime_quotes)/sizeof(anime_quotes[0]) - 1);
+    printf("\n╔════════════════════════════════════════════╗\n");
+    printf("║  ✨ ANIME QUOTE OF THE MOMENT ✨          ║\n");
+    printf("║  \"%s\"\n", anime_quotes[quote_index]);
+    printf("╚════════════════════════════════════════════╝\n");
+}
+
+const char* element_name(Element e) {
+    switch(e) {
+        case ELEM_FIRE: return "Fire";
+        case ELEM_ICE: return "Ice";
+        case ELEM_LIGHTNING: return "Lightning";
+        case ELEM_WATER: return "Water";
+        case ELEM_WIND: return "Wind";
+        case ELEM_EARTH: return "Earth";
+        case ELEM_DARK: return "Dark";
+        case ELEM_LIGHT: return "Light";
+        default: return "None";
+    }
+}
+
+const char* status_name(StatusEffect s) {
+    switch(s) {
+        case STATUS_BURN: return "Burn";
+        case STATUS_POISON: return "Poison";
+        case STATUS_FREEZE: return "Freeze";
+        case STATUS_STUN: return "Stun";
+        case STATUS_BLEED: return "Bleed";
+        case STATUS_SILENCE: return "Silence";
+        case STATUS_FEAR: return "Fear";
+        case STATUS_PARALYSIS: return "Paralysis";
+        case STATUS_SLEEP: return "Sleep";
+        case STATUS_CONFUSION: return "Confusion";
+        case STATUS_CURSE: return "Curse";
+        default: return "None";
+    }
+}
+
+const char* rarity_name(Rarity r) {
+    switch(r) {
+        case RARITY_COMMON: return "Common";
+        case RARITY_UNCOMMON: return "Uncommon";
+        case RARITY_RARE: return "Rare";
+        case RARITY_EPIC: return "Epic";
+        case RARITY_LEGENDARY: return "Legendary";
+        case RARITY_MYTHIC: return "Mythic";
+        default: return "Unknown";
+    }
+}
+
+const char* slot_name(EquipSlot s) {
+    switch(s) {
+        case SLOT_WEAPON: return "Weapon";
+        case SLOT_ARMOR: return "Armor";
+        case SLOT_HELMET: return "Helmet";
+        case SLOT_SHIELD: return "Shield";
+        case SLOT_RING: return "Ring";
+        default: return "Unknown";
+    }
+}
+
+/* ================= PLAYER IMPLEMENTATIONS ================= */
 const char* class_name(ClassType c) {
-    switch (c) {
+    switch(c) {
         case CLASS_WARRIOR: return "Warrior";
         case CLASS_MAGE: return "Mage";
         case CLASS_ARCHER: return "Archer";
@@ -140,77 +298,22 @@ const char* class_name(ClassType c) {
 }
 
 ClassType choose_class(void) {
-    int c;
-    printf("\n========== CLASS SELECT ==========\n");
-    printf("1. Warrior    (High HP/ATK)\n");
-    printf("2. Mage       (High INT/MP)\n");
-    printf("3. Archer     (High AGI/Crit)\n");
-    printf("4. Assassin   (High AGI/Dodge)\n");
-    printf("5. Paladin    (High DEF/HP)\n");
-    printf("6. Necromancer(High INT/Dark skills)\n");
-    printf("Choose: ");
-    if (scanf("%d", &c) != 1) {
-        while (getchar() != '\n');
-        return CLASS_WARRIOR;
-    }
-    if (c < 1 || c > 6) c = 1;
-    printf("\nSelected Class: %s\n", class_name((ClassType)(c - 1)));
+    printf("\n========================================\n");
+    printf("          CLASS SELECTION\n");
+    printf("========================================\n");
+    printf("\n 1. Warrior    - High HP & Attack\n");
+    printf(" 2. Mage       - High Magic Power\n");
+    printf(" 3. Archer     - Ranged & Critical\n");
+    printf(" 4. Assassin   - Speed & Dodge\n");
+    printf(" 5. Paladin    - Defense & Holy\n");
+    printf(" 6. Necromancer - Dark Magic\n");
+    printf("\nEnter your choice (1-6): ");
+    
+    int c = get_valid_input(1, 6);
+    printf("\nSelected: %s\n", class_name((ClassType)(c - 1)));
     return (ClassType)(c - 1);
 }
 
-/* ================= RARITY HELPERS ================= */
-const char* rarity_name(Rarity r) {
-    switch (r) {
-        case RARITY_COMMON: return "Common";
-        case RARITY_UNCOMMON: return "Uncommon";
-        case RARITY_RARE: return "Rare";
-        case RARITY_EPIC: return "Epic";
-        case RARITY_LEGENDARY: return "Legendary";
-        case RARITY_MYTHIC: return "Mythic";
-        default: return "Unknown";
-    }
-}
-const char* slot_name(EquipSlot s) {
-    switch (s) {
-        case SLOT_WEAPON: return "Weapon";
-        case SLOT_ARMOR: return "Armor";
-        case SLOT_HELMET: return "Helmet";
-        case SLOT_SHIELD: return "Shield";
-        case SLOT_RING: return "Ring";
-        default: return "Unknown";
-    }
-}
-const char* element_name(Element e) {
-    switch (e) {
-        case ELEM_FIRE: return "Fire";
-        case ELEM_ICE: return "Ice";
-        case ELEM_LIGHTNING: return "Lightning";
-        default: return "None";
-    }
-}
-const char* status_name(StatusEffect s) {
-    switch (s) {
-        case STATUS_BURN: return "Burn";
-        case STATUS_POISON: return "Poison";
-        case STATUS_FREEZE: return "Freeze";
-        case STATUS_STUN: return "Stun";
-        default: return "None";
-    }
-}
-/* Rarity multiplier for stat bonuses */
-int rarity_multiplier(Rarity r) {
-    switch (r) {
-        case RARITY_COMMON: return 1;
-        case RARITY_UNCOMMON: return 2;
-        case RARITY_RARE: return 3;
-        case RARITY_EPIC: return 5;
-        case RARITY_LEGENDARY: return 8;
-        case RARITY_MYTHIC: return 12;
-        default: return 1;
-    }
-}
-
-/* ================= PLAYER ================= */
 void add_skill(Player *p, const char *name, int power, int mp_cost, Element elem) {
     if (p->skill_count >= MAX_SKILLS) return;
     strncpy(p->skills[p->skill_count].name, name, MAX_NAME - 1);
@@ -221,53 +324,68 @@ void add_skill(Player *p, const char *name, int power, int mp_cost, Element elem
     p->skill_count++;
 }
 
-void add_item(Player *p, const char *name, int qty, int heal) {
-    /* If item already exists, stack it */
+void add_item(Player *p, const char *name, int qty, int heal, int mp_restore) {
     for (int i = 0; i < p->item_count; i++) {
-        if (strcmp(p->inventory[i].name, name) == 0) {
+        if (strcmp(p->inventory[i].name, name) == 0 &&
+            p->inventory[i].heal_amount == heal &&
+            p->inventory[i].restore_mp == mp_restore) {
             p->inventory[i].quantity += qty;
             return;
         }
     }
-    if (p->item_count >= MAX_INV) return;
+    if (p->item_count >= MAX_INV) {
+        printf("\nInventory full! Cannot add %s.\n", name);
+        return;
+    }
     strncpy(p->inventory[p->item_count].name, name, MAX_NAME - 1);
     p->inventory[p->item_count].name[MAX_NAME - 1] = '\0';
     p->inventory[p->item_count].quantity = qty;
     p->inventory[p->item_count].heal_amount = heal;
+    p->inventory[p->item_count].restore_mp = mp_restore;
     p->item_count++;
 }
 
-/* Apply class-based starting stats and skills */
 void apply_class_bonuses(Player *p, ClassType cls) {
     p->cls = cls;
-    switch (cls) {
+    switch(cls) {
         case CLASS_WARRIOR:
-            p->max_hp += 40; p->attack += 8; p->defense += 5; p->strength += 4;
-            add_skill(p, "Heavy Slash", 30, 8, ELEM_NONE);
+            p->max_hp += 60; p->attack += 10; p->defense += 8; 
+            p->strength += 6; p->stamina += 4;
+            add_skill(p, "Heavy Slash", 35, 8, ELEM_NONE);
+            add_skill(p, "War Cry", 0, 5, ELEM_NONE);
             break;
         case CLASS_MAGE:
-            p->max_mp += 40; p->intelligence += 6; p->attack -= 3;
-            add_skill(p, "Fireball", 25, 10, ELEM_FIRE);
-            add_skill(p, "Ice Shard", 28, 12, ELEM_ICE);
+            p->max_mp += 50; p->intelligence += 8; 
+            p->attack -= 2; p->critical_rate += 5;
+            add_skill(p, "Fireball", 30, 10, ELEM_FIRE);
+            add_skill(p, "Ice Shard", 35, 12, ELEM_ICE);
+            add_skill(p, "Lightning Bolt", 40, 15, ELEM_LIGHTNING);
             break;
         case CLASS_ARCHER:
-            p->agility += 6; p->luck += 3; p->attack += 4;
-            add_skill(p, "Piercing Arrow", 26, 9, ELEM_NONE);
+            p->agility += 8; p->luck += 4; p->attack += 5;
+            p->critical_rate += 10; p->dodge_chance += 5;
+            add_skill(p, "Piercing Arrow", 28, 9, ELEM_NONE);
+            add_skill(p, "Multi Shot", 20, 12, ELEM_NONE);
             break;
         case CLASS_ASSASSIN:
-            p->agility += 8; p->dodge_chance += 10; p->attack += 3;
-            add_skill(p, "Shadow Strike", 32, 11, ELEM_NONE);
+            p->agility += 10; p->dodge_chance += 15; 
+            p->attack += 4; p->critical_damage += 25;
+            add_skill(p, "Shadow Strike", 35, 11, ELEM_DARK);
+            add_skill(p, "Backstab", 45, 14, ELEM_NONE);
             break;
         case CLASS_PALADIN:
-            p->defense += 8; p->max_hp += 30; p->block_chance += 10;
-            add_skill(p, "Lightning Smite", 27, 10, ELEM_LIGHTNING);
+            p->defense += 10; p->max_hp += 40; p->block_chance += 10;
+            p->strength += 3; p->intelligence += 3;
+            add_skill(p, "Lightning Smite", 30, 10, ELEM_LIGHTNING);
+            add_skill(p, "Holy Shield", 0, 8, ELEM_LIGHT);
             break;
         case CLASS_NECROMANCER:
-            p->intelligence += 7; p->max_mp += 25;
-            add_skill(p, "Dark Bolt", 30, 11, ELEM_NONE);
+            p->intelligence += 9; p->max_mp += 30;
+            add_skill(p, "Dark Bolt", 32, 11, ELEM_DARK);
+            add_skill(p, "Summon Spirit", 15, 15, ELEM_DARK);
+            add_skill(p, "Curse", 0, 10, ELEM_DARK);
             break;
     }
-    /* Heal is universal */
     add_skill(p, "Heal", 30, 8, ELEM_NONE);
 }
 
@@ -288,49 +406,59 @@ void init_player(Player *p, const char *name, ClassType cls) {
     p->agility = 8;
     p->intelligence = 6;
     p->luck = 5;
+    p->stamina = 8;
+    p->critical_rate = 5;
+    p->critical_damage = 150;
+    p->dodge_chance = 5;
+    p->block_chance = 5;
     p->skill_count = 0;
     p->item_count = 0;
     p->kills = 0;
     p->damage_dealt = 0;
     p->damage_taken = 0;
-    p->dodge_chance = 5;  /* base dodge */
-    p->block_chance = 5;  /* base block */
+    p->bosses_defeated = 0;
+    p->total_gold_earned = 0;
+    p->combos = 0;
+    p->highest_combo = 0;
+    
     for (int i = 0; i < MAX_EQUIP; i++) p->has_equipment[i] = 0;
-
+    for (int i = 0; i < 20; i++) p->achievements[i] = 0;
+    
     apply_class_bonuses(p, cls);
-
-    /* Re-apply full heal since bonuses may have changed max stats */
-    p->hp = p->max_hp;
-    p->mp = p->max_mp;
-
-    add_item(p, "Health Potion", 3, 40);
-    add_item(p, "Mana Potion", 2, 0); /* heal_amount=0 means restores MP, handled specially */
+    p->hp = total_max_hp(p);
+    p->mp = total_max_mp(p);
+    
+    add_item(p, "Health Potion", 3, 40, 0);
+    add_item(p, "Mana Potion", 2, 0, 30);
+    add_item(p, "Bread", 2, 15, 0);
 }
 
-/* Compute total attack/defense including equipment bonuses */
 int total_attack(Player *p) {
-    int atk = p->attack + p->strength;
+    int atk = p->attack + p->strength * 2;
     for (int i = 0; i < MAX_EQUIP; i++) {
         if (p->has_equipment[i]) atk += p->equipment[i].atk_bonus;
     }
     return atk;
 }
+
 int total_defense(Player *p) {
-    int def = p->defense;
+    int def = p->defense + p->stamina;
     for (int i = 0; i < MAX_EQUIP; i++) {
         if (p->has_equipment[i]) def += p->equipment[i].def_bonus;
     }
     return def;
 }
+
 int total_max_hp(Player *p) {
-    int hp = p->max_hp;
+    int hp = p->max_hp + p->stamina * 3;
     for (int i = 0; i < MAX_EQUIP; i++) {
         if (p->has_equipment[i]) hp += p->equipment[i].hp_bonus;
     }
     return hp;
 }
+
 int total_max_mp(Player *p) {
-    int mp = p->max_mp;
+    int mp = p->max_mp + p->intelligence * 2;
     for (int i = 0; i < MAX_EQUIP; i++) {
         if (p->has_equipment[i]) mp += p->equipment[i].mp_bonus;
     }
@@ -338,171 +466,129 @@ int total_max_mp(Player *p) {
 }
 
 void print_status(Player *p) {
-    printf("\n--- %s the %s (Lv.%d) ---\n", p->name, class_name(p->cls), p->level);
-    printf("HP: %d/%d   MP: %d/%d\n", p->hp, total_max_hp(p), p->mp, total_max_mp(p));
-    printf("EXP: %d/%d   Gold: %d\n", p->exp, p->exp_to_next, p->gold);
-    printf("ATK:%d (base %d) DEF:%d (base %d)\n", total_attack(p), p->attack, total_defense(p), p->defense);
-    printf("STR:%d AGI:%d INT:%d LUK:%d\n",
-           p->strength, p->agility, p->intelligence, p->luck);
-    printf("Dodge:%d%% Block:%d%%\n", p->dodge_chance, p->block_chance);
+    printf("\n========================================\n");
+    printf("  ⚔️ %s the %s (Level %d)\n", p->name, class_name(p->cls), p->level);
+    printf("========================================\n");
+    printf(" HP: %d/%d    MP: %d/%d\n", p->hp, total_max_hp(p), p->mp, total_max_mp(p));
+    printf(" ATK: %d      DEF: %d\n", total_attack(p), total_defense(p));
+    printf(" Gold: %d     EXP: %d/%d\n", p->gold, p->exp, p->exp_to_next);
+    printf(" Kills: %d    Bosses: %d\n", p->kills, p->bosses_defeated);
+    printf("========================================\n");
 }
 
-void print_skills(Player *p) {
-    printf("\n-- Skills --\n");
-    for (int i = 0; i < p->skill_count; i++) {
-        if (p->skills[i].element != ELEM_NONE) {
-            printf("%d) %s [%s] (Power:%d, MP:%d)\n",
-                   i + 1, p->skills[i].name, element_name(p->skills[i].element),
-                   p->skills[i].power, p->skills[i].mp_cost);
+void print_equipment(Player *p) {
+    printf("\n========== EQUIPMENT ==========\n");
+    for (int i = 0; i < MAX_EQUIP; i++) {
+        if (p->has_equipment[i]) {
+            printf("%s: %s [%s] (ATK+%d DEF+%d HP+%d)\n",
+                   slot_name(i), p->equipment[i].name, 
+                   rarity_name(p->equipment[i].rarity),
+                   p->equipment[i].atk_bonus, p->equipment[i].def_bonus,
+                   p->equipment[i].hp_bonus);
         } else {
-            printf("%d) %s (Power:%d, MP:%d)\n",
-                   i + 1, p->skills[i].name,
-                   p->skills[i].power, p->skills[i].mp_cost);
+            printf("%s: (empty)\n", slot_name(i));
         }
     }
+    printf("================================\n");
 }
 
 void print_inventory(Player *p) {
-    printf("\n-- Inventory --\n");
+    printf("\n========== INVENTORY ==========\n");
     if (p->item_count == 0) {
         printf("(empty)\n");
         return;
     }
     for (int i = 0; i < p->item_count; i++) {
-        if (p->inventory[i].heal_amount > 0) {
-            printf("%d) %s x%d (heals %d HP)\n",
-                   i + 1, p->inventory[i].name,
-                   p->inventory[i].quantity,
-                   p->inventory[i].heal_amount);
-        } else {
-            printf("%d) %s x%d (restores MP)\n",
-                   i + 1, p->inventory[i].name,
-                   p->inventory[i].quantity);
-        }
+        printf("%d) %s x%d", i+1, p->inventory[i].name, p->inventory[i].quantity);
+        if (p->inventory[i].heal_amount > 0) 
+            printf(" (Heal %d HP)", p->inventory[i].heal_amount);
+        if (p->inventory[i].restore_mp > 0) 
+            printf(" (Restore %d MP)", p->inventory[i].restore_mp);
+        printf("\n");
     }
+    printf("================================\n");
 }
 
-void print_equipment(Player *p) {
-    printf("\n-- Equipped --\n");
-    for (int i = 0; i < MAX_EQUIP; i++) {
-        if (p->has_equipment[i]) {
-            Equipment *e = &p->equipment[i];
-            printf("%s: %s [%s] (ATK+%d DEF+%d HP+%d MP+%d)\n",
-                   slot_name((EquipSlot)i), e->name, rarity_name(e->rarity),
-                   e->atk_bonus, e->def_bonus, e->hp_bonus, e->mp_bonus);
-        } else {
-            printf("%s: (empty)\n", slot_name((EquipSlot)i));
-        }
+void print_skills(Player *p) {
+    printf("\n========== SKILLS ==========\n");
+    for (int i = 0; i < p->skill_count; i++) {
+        printf("%d) %s", i+1, p->skills[i].name);
+        if (p->skills[i].element != ELEM_NONE) 
+            printf(" [%s]", element_name(p->skills[i].element));
+        printf(" (Power:%d MP:%d)\n", p->skills[i].power, p->skills[i].mp_cost);
     }
+    printf("=============================\n");
 }
 
 void show_stats(Player *p) {
     printf("\n========== PLAYER STATS ==========\n");
     print_status(p);
-    printf("Kills: %d\n", p->kills);
+    print_equipment(p);
+    print_inventory(p);
+    print_skills(p);
+    
+    printf("\n========== COMBAT STATS ==========\n");
+    printf("Critical Rate: %d%%\n", p->critical_rate + p->luck/2);
+    printf("Critical Damage: %d%%\n", p->critical_damage);
+    printf("Dodge Chance: %d%%\n", p->dodge_chance + p->agility/3);
+    printf("Block Chance: %d%%\n", p->block_chance);
+    
+    printf("\n========== RECORDS ==========\n");
     printf("Damage Dealt: %d\n", p->damage_dealt);
     printf("Damage Taken: %d\n", p->damage_taken);
-    print_inventory(p);
-    print_equipment(p);
-    print_skills(p);
-    printf("==================================\n");
+    printf("Total Gold: %d\n", p->total_gold_earned);
+    printf("Highest Combo: %d\n", p->highest_combo);
+    printf("================================\n");
+    
+    show_anime_quote();
+    printf("\nPress Enter to continue...");
+    getchar();
 }
 
-/* ================= LEVEL UP ================= */
 void level_up(Player *p) {
     while (p->exp >= p->exp_to_next) {
         p->exp -= p->exp_to_next;
         p->level++;
         p->exp_to_next = (int)(p->exp_to_next * 1.25);
-        p->max_hp += 25;
-        p->max_mp += 10;
+        
+        p->max_hp += 25 + p->stamina;
+        p->max_mp += 10 + p->intelligence / 2;
         p->attack += 5;
         p->defense += 3;
         p->strength += 2;
         p->agility += 2;
         p->intelligence += 2;
         p->luck += 1;
+        p->stamina += 2;
+        
         p->hp = total_max_hp(p);
         p->mp = total_max_mp(p);
-        printf("\n*** LEVEL UP! %s is now level %d! ***\n", p->name, p->level);
+        
+        printf("\n========================================\n");
+        printf("     🌟 LEVEL UP! %s is now level %d! 🌟\n", p->name, p->level);
+        printf("========================================\n");
+        show_anime_quote();
+        
         if (p->level % 5 == 0) {
-            printf("*** BOSS LEVEL REACHED! ***\n");
+            printf("*** ⚔️ BOSS LEVEL REACHED! ⚔️ ***\n");
         }
+        
+        if (p->level == 10) p->achievements[0] = 1;
+        if (p->level == 25) p->achievements[1] = 1;
+        if (p->level == 50) p->achievements[2] = 1;
     }
 }
 
 void gain_exp(Player *p, int amount) {
     p->exp += amount;
-    printf("%s gained %d EXP!\n", p->name, amount);
+    printf("\n%s gained %d EXP!\n", p->name, amount);
     level_up(p);
 }
 
-/* ================= EQUIPMENT GENERATION ================= */
-/* Generate a random piece of equipment appropriate for a slot, scaled by level */
-Equipment generate_equipment(EquipSlot slot, int level) {
-    Equipment eq;
-    eq.slot = slot;
-    eq.equipped = 0;
-
-    /* Determine rarity with weighted randomness (common = most likely) */
-    int roll = r(1, 100);
-    if (roll <= 50) eq.rarity = RARITY_COMMON;
-    else if (roll <= 75) eq.rarity = RARITY_UNCOMMON;
-    else if (roll <= 90) eq.rarity = RARITY_RARE;
-    else if (roll <= 97) eq.rarity = RARITY_EPIC;
-    else if (roll <= 99) eq.rarity = RARITY_LEGENDARY;
-    else eq.rarity = RARITY_MYTHIC;
-
-    int mult = rarity_multiplier(eq.rarity);
-    int scale = (level / 2) + 1;
-
-    eq.atk_bonus = 0;
-    eq.def_bonus = 0;
-    eq.hp_bonus = 0;
-    eq.mp_bonus = 0;
-
-    const char *base_name = "Item";
-    switch (slot) {
-        case SLOT_WEAPON:
-            eq.atk_bonus = mult * scale * 2;
-            base_name = "Blade";
-            break;
-        case SLOT_ARMOR:
-            eq.def_bonus = mult * scale * 2;
-            eq.hp_bonus = mult * scale;
-            base_name = "Armor";
-            break;
-        case SLOT_HELMET:
-            eq.def_bonus = mult * scale;
-            eq.hp_bonus = mult * scale / 2 + 1;
-            base_name = "Helm";
-            break;
-        case SLOT_SHIELD:
-            eq.def_bonus = mult * scale * 2;
-            base_name = "Shield";
-            break;
-        case SLOT_RING:
-            eq.mp_bonus = mult * scale;
-            eq.atk_bonus = mult * scale / 2;
-            base_name = "Ring";
-            break;
-    }
-
-    snprintf(eq.name, MAX_NAME, "%s %s", rarity_name(eq.rarity), base_name);
-    return eq;
-}
-
-/* Equip an item into player's equipment slots */
-void equip_item(Player *p, Equipment eq) {
-    p->equipment[eq.slot] = eq;
-    p->equipment[eq.slot].equipped = 1;
-    p->has_equipment[eq.slot] = 1;
-    printf("Equipped %s [%s] in slot %s!\n", eq.name, rarity_name(eq.rarity), slot_name(eq.slot));
-}
-
-/* ================= ENEMY ================= */
+/* ================= ENEMY IMPLEMENTATIONS ================= */
 void init_enemy(Enemy *e, const char *name, int hp, int atk, int def,
-                int exp, int gold, int is_boss, int is_elite, Element resist) {
+                int exp, int gold, int is_boss, int is_elite, 
+                Element resist, Element weakness) {
     strncpy(e->name, name, MAX_NAME - 1);
     e->name[MAX_NAME - 1] = '\0';
     e->max_hp = hp;
@@ -514,6 +600,7 @@ void init_enemy(Enemy *e, const char *name, int hp, int atk, int def,
     e->is_boss = is_boss;
     e->is_elite = is_elite;
     e->resist = resist;
+    e->weakness = weakness;
     e->status = STATUS_NONE;
     e->status_turns = 0;
 }
@@ -521,40 +608,52 @@ void init_enemy(Enemy *e, const char *name, int hp, int atk, int def,
 Enemy create_enemy(Player *p, int map) {
     Enemy e;
     if (p->level % 5 == 0) {
-        const char *boss_name;
+        const char *bosses[] = {
+            "Forest King Thornroot", "Skeleton King Xerath",
+            "Shadow Emperor Nocturn", "Chaos Titan Zorath",
+            "Dragon Lord Pyros", "Void Lich Malachar"
+        };
         Element resist = ELEM_NONE;
-        if (map == 1) { boss_name = "Forest King Thornroot"; resist = ELEM_NONE; }
-        else if (map == 2) { boss_name = "Skeleton King Xerath"; resist = ELEM_ICE; }
-        else if (map == 3) { boss_name = "Shadow Emperor Nocturn"; resist = ELEM_LIGHTNING; }
-        else { boss_name = "Chaos Titan Zorath"; resist = ELEM_FIRE; }
-        init_enemy(&e, boss_name,
-                   200 + p->level * 30,
-                   25 + p->level * 4,
-                   10 + p->level,
-                   90, 150, 1, 0, resist);
-        printf("\n*** BOSS BATTLE: %s appears! ***\n", e.name);
+        Element weakness = ELEM_NONE;
+        int idx = (p->level / 5 - 1) % 6;
+        if (idx < 0) idx = 0;
+        
+        switch(map) {
+            case 1: resist = ELEM_NONE; weakness = ELEM_FIRE; break;
+            case 2: resist = ELEM_ICE; weakness = ELEM_LIGHT; break;
+            case 3: resist = ELEM_DARK; weakness = ELEM_LIGHT; break;
+            case 4: resist = ELEM_FIRE; weakness = ELEM_ICE; break;
+            case 5: resist = ELEM_LIGHTNING; weakness = ELEM_ICE; break;
+            default: break;
+        }
+        
+        init_enemy(&e, bosses[idx % 6],
+                   200 + p->level * 35,
+                   25 + p->level * 5,
+                   10 + p->level * 2,
+                   90 + p->level * 2,
+                   150 + p->level * 3,
+                   1, 0, resist, weakness);
+        printf("\n========================================\n");
+        printf("     👑 BOSS BATTLE: %s 👑\n", e.name);
+        printf("========================================\n");
     } else {
-        const char *forest[] = {"Wolf", "Vine Stalker", "Forest Hunter", "Root Beast"};
-        const char *dungeon[] = {"Skeleton Knight", "Cursed Armor", "Dark Prisoner", "Blood Warden"};
-        const char *dark[] = {"Void Walker", "Shadow Reaper", "Nightmare", "Soul Devourer"};
-        const char *chaos[] = {"Flame Demon", "Chaos Beast", "Rift Walker", "Infernal Shade"};
-        const char *pick_name;
+        const char *enemy_pools[5][4] = {
+            {"Wolf", "Vine Stalker", "Forest Hunter", "Root Beast"},
+            {"Skeleton Knight", "Cursed Armor", "Dark Prisoner", "Blood Warden"},
+            {"Void Walker", "Shadow Reaper", "Nightmare", "Soul Devourer"},
+            {"Flame Demon", "Chaos Beast", "Rift Walker", "Infernal Shade"},
+            {"Young Dragon", "Drake", "Wyvern", "Dragon Knight"}
+        };
         int pick = r(0, 3);
-        Element resist = ELEM_NONE;
-        if (map == 1) { pick_name = forest[pick]; }
-        else if (map == 2) { pick_name = dungeon[pick]; resist = ELEM_ICE; }
-        else if (map == 3) { pick_name = dark[pick]; resist = ELEM_LIGHTNING; }
-        else { pick_name = chaos[pick]; resist = ELEM_FIRE; }
-
-        /* 15% chance for an Elite variant */
         int is_elite = (r(1, 100) <= 15);
-
-        int hp = 60 + p->level * 10;
-        int atk = 10 + p->level * 2;
+        
+        int hp = 60 + p->level * 12;
+        int atk = 10 + p->level * 3;
         int def = 5 + p->level;
-        int exp_r = 40;
-        int gold_r = 50;
-
+        int exp_r = 40 + p->level * 2;
+        int gold_r = 50 + p->level * 3;
+        
         if (is_elite) {
             hp = (int)(hp * 1.8);
             atk = (int)(atk * 1.4);
@@ -562,502 +661,506 @@ Enemy create_enemy(Player *p, int map) {
             exp_r = (int)(exp_r * 2);
             gold_r = (int)(gold_r * 2);
         }
-
-        init_enemy(&e, pick_name, hp, atk, def, exp_r, gold_r, 0, is_elite, resist);
-
+        
+        Element resist = ELEM_NONE;
+        Element weakness = ELEM_NONE;
+        
+        if (map == 2) resist = ELEM_ICE;
+        else if (map == 3) resist = ELEM_DARK;
+        else if (map == 4) resist = ELEM_FIRE;
+        else if (map == 5) {
+            resist = ELEM_LIGHTNING;
+            weakness = ELEM_ICE;
+        }
+        
+        init_enemy(&e, enemy_pools[map-1][pick], hp, atk, def, exp_r, gold_r,
+                   0, is_elite, resist, weakness);
+        
         if (is_elite) {
-            printf("\n=== An ELITE %s appears! Be careful! (HP:%d) ===\n", e.name, e.max_hp);
+            printf("\n========================================\n");
+            printf("     ⚡ ELITE: %s appears! ⚡\n", e.name);
+            printf("========================================\n");
         } else {
-            printf("\n=== A wild %s appears! (HP:%d) ===\n", e.name, e.max_hp);
+            printf("\n========================================\n");
+            printf("     %s appears!\n", e.name);
+            printf("========================================\n");
         }
     }
     return e;
 }
 
-/* ================= STATUS EFFECTS ================= */
-/* Apply a status effect to enemy based on skill element */
 void apply_status_from_element(Enemy *e, Element elem) {
-    int chance = r(1, 100);
-    if (chance > 35) return; /* 35% chance to apply */
-
-    switch (elem) {
+    if (r(1, 100) > 35) return;
+    if (e->status != STATUS_NONE) return;
+    
+    switch(elem) {
         case ELEM_FIRE:
             if (e->resist != ELEM_FIRE) {
                 e->status = STATUS_BURN;
                 e->status_turns = 3;
-                printf("%s is now Burning!\n", e->name);
+                printf("🔥 %s is BURNING!\n", e->name);
             }
             break;
         case ELEM_ICE:
             if (e->resist != ELEM_ICE) {
                 e->status = STATUS_FREEZE;
                 e->status_turns = 2;
-                printf("%s is Frozen!\n", e->name);
+                printf("❄️ %s is FROZEN!\n", e->name);
             }
             break;
         case ELEM_LIGHTNING:
             if (e->resist != ELEM_LIGHTNING) {
                 e->status = STATUS_STUN;
                 e->status_turns = 1;
-                printf("%s is Stunned!\n", e->name);
+                printf("⚡ %s is STUNNED!\n", e->name);
             }
             break;
-        default:
+        case ELEM_DARK:
+            if (e->resist != ELEM_DARK) {
+                e->status = STATUS_CURSE;
+                e->status_turns = 3;
+                printf("🌑 %s is CURSED!\n", e->name);
+            }
             break;
+        case ELEM_WATER:
+            if (e->resist != ELEM_WATER) {
+                e->status = STATUS_POISON;
+                e->status_turns = 3;
+                printf("💀 %s is POISONED!\n", e->name);
+            }
+            break;
+        default: break;
     }
 }
 
-/* Process enemy status effect at start of its turn.
-   Returns 1 if enemy's turn should be skipped (Stun/Freeze). */
 int process_enemy_status(Enemy *e) {
     if (e->status == STATUS_NONE) return 0;
-
+    
     int skip_turn = 0;
-
-    switch (e->status) {
+    switch(e->status) {
         case STATUS_BURN:
-            {
-                int dmg = e->max_hp / 20;
-                if (dmg < 1) dmg = 1;
-                e->hp -= dmg;
-                if (e->hp < 0) e->hp = 0;
-                printf("%s suffers %d Burn damage! (HP: %d/%d)\n", e->name, dmg, e->hp, e->max_hp);
-            }
+            e->hp -= e->max_hp / 20;
+            if (e->hp < 0) e->hp = 0;
+            printf("🔥 %s takes BURN damage! (HP: %d/%d)\n", e->name, e->hp, e->max_hp);
             break;
         case STATUS_POISON:
-            {
-                int dmg = e->max_hp / 15;
-                if (dmg < 1) dmg = 1;
-                e->hp -= dmg;
-                if (e->hp < 0) e->hp = 0;
-                printf("%s suffers %d Poison damage! (HP: %d/%d)\n", e->name, dmg, e->hp, e->max_hp);
-            }
+            e->hp -= e->max_hp / 15;
+            if (e->hp < 0) e->hp = 0;
+            printf("💀 %s takes POISON damage! (HP: %d/%d)\n", e->name, e->hp, e->max_hp);
             break;
         case STATUS_FREEZE:
-            printf("%s is Frozen and can't move!\n", e->name);
+            printf("❄️ %s is FROZEN and can't move!\n", e->name);
             skip_turn = 1;
             break;
         case STATUS_STUN:
-            printf("%s is Stunned and can't move!\n", e->name);
+            printf("⚡ %s is STUNNED and can't move!\n", e->name);
             skip_turn = 1;
             break;
-        default:
+        case STATUS_BLEED:
+            e->hp -= e->max_hp / 25;
+            if (e->hp < 0) e->hp = 0;
+            printf("🩸 %s BLEEDS! (HP: %d/%d)\n", e->name, e->hp, e->max_hp);
             break;
+        case STATUS_CURSE:
+            e->attack -= 5;
+            printf("🌑 %s is CURSED! Attack reduced!\n", e->name);
+            break;
+        default: break;
     }
-
+    
     e->status_turns--;
     if (e->status_turns <= 0) {
+        if (e->status == STATUS_CURSE) e->attack += 5;
         e->status = STATUS_NONE;
+        printf("%s recovered from status!\n", e->name);
     }
-
     return skip_turn;
 }
 
-/* ================= COMBAT ================= */
+/* ================= COMBAT IMPLEMENTATIONS ================= */
 int is_critical(Player *p) {
-    int chance = 5 + p->luck;
-    return (rand() % 100) < chance;
+    return (r(1, 100) <= p->critical_rate + p->luck / 2);
 }
 
 int calc_damage(int attack, int defense) {
-    int dmg = roll_damage(attack) - defense;
+    int dmg = roll_damage(attack) - defense / 2;
     if (dmg < 1) dmg = 1;
     return dmg;
 }
 
-/* Apply elemental resistance: halves damage if enemy resists the element */
-int apply_elemental_resist(int dmg, Element atk_elem, Enemy *e) {
-    if (atk_elem != ELEM_NONE && atk_elem == e->resist) {
-        printf("%s resists %s damage!\n", e->name, element_name(atk_elem));
-        dmg = dmg / 2;
-        if (dmg < 1) dmg = 1;
-    }
-    return dmg;
-}
-
-void player_attack(Player *p, Enemy *e) {
-    int dmg = calc_damage(total_attack(p), e->defense);
-    if (is_critical(p)) {
-        dmg *= 2;
-        printf("CRITICAL HIT! ");
-    }
-    e->hp -= dmg;
-    if (e->hp < 0) e->hp = 0;
-    p->damage_dealt += dmg;
-    printf("%s attacks %s for %d damage! (%s HP: %d/%d)\n",
-           p->name, e->name, dmg, e->name, e->hp, e->max_hp);
-}
-
-void player_use_skill(Player *p, Enemy *e, int skill_index) {
-    if (skill_index < 0 || skill_index >= p->skill_count) {
-        printf("Invalid skill.\n");
-        return;
-    }
-    Skill *s = &p->skills[skill_index];
-    if (p->mp < s->mp_cost) {
-        printf("Not enough MP!\n");
-        return;
-    }
-    p->mp -= s->mp_cost;
-
-    if (strcmp(s->name, "Heal") == 0) {
-        int heal = s->power + p->intelligence;
-        p->hp += heal;
-        if (p->hp > total_max_hp(p)) p->hp = total_max_hp(p);
-        printf("%s casts Heal and recovers %d HP! (HP: %d/%d)\n",
-               p->name, heal, p->hp, total_max_hp(p));
-        return;
-    }
-
-    int base = s->power + p->intelligence * 2;
-    if (strcmp(s->name, "Lightning Smite") == 0 || strcmp(s->name, "Ice Shard") == 0) {
-        base += r(0, 20);
-    }
-
-    int dmg = calc_damage(base, e->defense);
-    dmg = apply_elemental_resist(dmg, s->element, e);
-
-    if (is_critical(p)) {
-        dmg = (int)(dmg * 1.5);
-        printf("CRITICAL SKILL HIT! ");
-    }
-
-    e->hp -= dmg;
-    if (e->hp < 0) e->hp = 0;
-    p->damage_dealt += dmg;
-    printf("%s casts %s on %s for %d damage! (%s HP: %d/%d)\n",
-           p->name, s->name, e->name, dmg, e->name, e->hp, e->max_hp);
-
-    apply_status_from_element(e, s->element);
-}
-
-void use_item(Player *p, int index) {
-    if (index < 0 || index >= p->item_count) {
-        printf("Invalid item.\n");
-        return;
-    }
-    Item *it = &p->inventory[index];
-    if (it->quantity <= 0) {
-        printf("You have none of that left.\n");
-        return;
-    }
-    if (it->heal_amount > 0) {
-        p->hp += it->heal_amount;
-        if (p->hp > total_max_hp(p)) p->hp = total_max_hp(p);
-        printf("Used %s, healed %d HP! (HP: %d/%d)\n",
-               it->name, it->heal_amount, p->hp, total_max_hp(p));
-    } else if (strcmp(it->name, "Mana Potion") == 0) {
-        int restore = 30;
-        p->mp += restore;
-        if (p->mp > total_max_mp(p)) p->mp = total_max_mp(p);
-        printf("Used %s, restored %d MP! (MP: %d/%d)\n",
-               it->name, restore, p->mp, total_max_mp(p));
-    }
-    it->quantity--;
-}
-
-/* Returns 1 if the player successfully dodged the attack */
 int try_dodge(Player *p) {
-    return (r(1, 100) <= p->dodge_chance);
+    return (r(1, 100) <= p->dodge_chance + p->agility / 3);
 }
-/* Returns 1 if the player blocked (halves damage) */
+
 int try_block(Player *p) {
     return (r(1, 100) <= p->block_chance);
 }
 
-void enemy_attack(Enemy *e, Player *p) {
-    if (try_dodge(p)) {
-        printf("%s dodges %s's attack completely!\n", p->name, e->name);
+void player_attack(Player *p, Enemy *e) {
+    int dmg = calc_damage(total_attack(p), e->defense);
+    
+    if (is_critical(p)) {
+        dmg = dmg * p->critical_damage / 100;
+        printf("💥 CRITICAL HIT! ");
+        p->combos++;
+        if (p->combos > p->highest_combo) p->highest_combo = p->combos;
+    } else {
+        p->combos = 0;
+    }
+    
+    if (e->weakness != ELEM_NONE) {
+        printf("🎯 WEAKNESS EXPLOITED! ");
+        dmg = (int)(dmg * 1.5);
+    }
+    
+    e->hp -= dmg;
+    if (e->hp < 0) e->hp = 0;
+    p->damage_dealt += dmg;
+    
+    printf("%s attacks %s for %d damage!\n", p->name, e->name, dmg);
+    printf("%s HP: %d/%d\n", e->name, e->hp, e->max_hp);
+}
+
+void player_use_skill(Player *p, Enemy *e, int skill_index) {
+    if (skill_index < 0 || skill_index >= p->skill_count) {
+        printf("Invalid skill!\n");
         return;
     }
+    Skill *s = &p->skills[skill_index];
+    if (p->mp < s->mp_cost) {
+        printf("Not enough MP! (Need %d)\n", s->mp_cost);
+        return;
+    }
+    p->mp -= s->mp_cost;
+    
+    if (strcmp(s->name, "Heal") == 0) {
+        int heal = s->power + p->intelligence * 2;
+        p->hp += heal;
+        if (p->hp > total_max_hp(p)) p->hp = total_max_hp(p);
+        printf("💚 %s casts Heal and recovers %d HP! (HP: %d/%d)\n",
+               p->name, heal, p->hp, total_max_hp(p));
+        return;
+    }
+    
+    if (strcmp(s->name, "War Cry") == 0) {
+        p->attack += 5;
+        printf("🗡️ %s uses War Cry! Attack increased by 5!\n", p->name);
+        return;
+    }
+    
+    if (strcmp(s->name, "Holy Shield") == 0) {
+        p->defense += 10;
+        printf("🛡️ %s uses Holy Shield! Defense increased by 10!\n", p->name);
+        return;
+    }
+    
+    if (strcmp(s->name, "Curse") == 0) {
+        e->attack -= 5;
+        printf("🌑 %s curses %s! Attack reduced!\n", p->name, e->name);
+        return;
+    }
+    
+    if (strcmp(s->name, "Summon Spirit") == 0) {
+        int dmg = calc_damage(s->power + p->intelligence, e->defense);
+        e->hp -= dmg;
+        if (e->hp < 0) e->hp = 0;
+        p->damage_dealt += dmg;
+        printf("👻 %s summons a spirit for %d damage!\n", p->name, dmg);
+        printf("%s HP: %d/%d\n", e->name, e->hp, e->max_hp);
+        return;
+    }
+    
+    int base = s->power + p->intelligence * 2;
+    int dmg = calc_damage(base, e->defense);
+    
+    if (e->weakness == s->element) {
+        dmg = (int)(dmg * 1.5);
+        printf("🎯 WEAKNESS EXPLOITED! ");
+    }
+    if (e->resist == s->element) {
+        dmg = dmg / 2;
+        if (dmg < 1) dmg = 1;
+        printf("🛡️ %s resists %s! ", e->name, element_name(s->element));
+    }
+    
+    if (is_critical(p)) {
+        dmg = (int)(dmg * 1.5);
+        printf("💥 CRITICAL SKILL! ");
+    }
+    
+    e->hp -= dmg;
+    if (e->hp < 0) e->hp = 0;
+    p->damage_dealt += dmg;
+    
+    printf("✨ %s casts %s for %d damage!\n", p->name, s->name, dmg);
+    printf("%s HP: %d/%d\n", e->name, e->hp, e->max_hp);
+    
+    apply_status_from_element(e, s->element);
+}
 
-    int dmg = calc_damage(e->attack, total_defense(p) + p->agility / 2);
-
+void enemy_attack(Enemy *e, Player *p) {
+    if (try_dodge(p)) {
+        printf("💨 %s dodges the attack!\n", p->name);
+        return;
+    }
+    
+    int dmg = calc_damage(e->attack, total_defense(p));
     if (try_block(p)) {
         dmg = dmg / 2;
         if (dmg < 1) dmg = 1;
-        printf("%s blocks the attack, reducing damage!\n", p->name);
+        printf("🛡️ %s blocks! Reduced damage.\n", p->name);
     }
-
+    
     p->hp -= dmg;
     if (p->hp < 0) p->hp = 0;
     p->damage_taken += dmg;
-    printf("%s attacks %s for %d damage! (HP: %d/%d)\n",
-           e->name, p->name, dmg, p->hp, total_max_hp(p));
+    
+    printf("💢 %s hits %s for %d damage!\n", e->name, p->name, dmg);
+    printf("%s HP: %d/%d\n", p->name, p->hp, total_max_hp(p));
 }
 
-/* ================= LOOT DROPS ================= */
-/* On enemy defeat, possibly drop equipment or items */
-void roll_loot_drop(Player *p, Enemy *e, int map) {
-    int drop_chance = e->is_boss ? 100 : (e->is_elite ? 60 : 25);
-
-    if (r(1, 100) > drop_chance) {
-        return; /* no drop */
-    }
-
-    /* Decide between equipment drop or item drop */
-    int kind = r(1, 100);
-
-    if (kind <= 60) {
-        /* Equipment drop */
-        EquipSlot slot = (EquipSlot)r(0, MAX_EQUIP - 1);
-        Equipment eq = generate_equipment(slot, p->level);
-
-        /* Bosses guarantee at least Epic rarity */
-        if (e->is_boss && eq.rarity < RARITY_EPIC) {
-            eq.rarity = RARITY_EPIC;
-            int mult = rarity_multiplier(eq.rarity);
-            int scale = (p->level / 2) + 1;
-            switch (slot) {
-                case SLOT_WEAPON: eq.atk_bonus = mult * scale * 2; break;
-                case SLOT_ARMOR: eq.def_bonus = mult * scale * 2; eq.hp_bonus = mult * scale; break;
-                case SLOT_HELMET: eq.def_bonus = mult * scale; eq.hp_bonus = mult * scale / 2 + 1; break;
-                case SLOT_SHIELD: eq.def_bonus = mult * scale * 2; break;
-                case SLOT_RING: eq.mp_bonus = mult * scale; eq.atk_bonus = mult * scale / 2; break;
-            }
-            snprintf(eq.name, MAX_NAME, "%s %s", rarity_name(eq.rarity),
-                     slot == SLOT_WEAPON ? "Blade" :
-                     slot == SLOT_ARMOR ? "Armor" :
-                     slot == SLOT_HELMET ? "Helm" :
-                     slot == SLOT_SHIELD ? "Shield" : "Ring");
+int battle(Player *p, int map) {
+    Enemy e = create_enemy(p, map);
+    
+    while (p->hp > 0 && e.hp > 0) {
+        printf("\n========================================\n");
+        printf("             ⚔️ BATTLE ⚔️\n");
+        printf("========================================\n");
+        
+        printf("\n%s\n", e.name);
+        printf("HP: %d/%d", e.hp, e.max_hp);
+        if (e.status != STATUS_NONE) printf(" [%s]", status_name(e.status));
+        printf("\n");
+        
+        if (e.is_boss) {
+            printf("*** 👑 BOSS BATTLE! 👑 ***\n");
         }
-
-        printf("\n*** LOOT: %s found a %s [%s]! ***\n", p->name, eq.name, rarity_name(eq.rarity));
-        printf("Stats: ATK+%d DEF+%d HP+%d MP+%d\n", eq.atk_bonus, eq.def_bonus, eq.hp_bonus, eq.mp_bonus);
-
-        /* Auto-equip if slot empty, otherwise ask */
-        if (!p->has_equipment[slot]) {
-            equip_item(p, eq);
-        } else {
-            printf("Replace your current %s? (1=Yes, 0=No): ", slot_name(slot));
-            int choice;
-            if (scanf("%d", &choice) == 1 && choice == 1) {
-                equip_item(p, eq);
-            } else {
-                printf("Item discarded.\n");
-            }
-        }
-    } else {
-        /* Item drop */
-        if (r(1, 100) <= 60) {
-            add_item(p, "Health Potion", 1, 40);
-            printf("\n*** LOOT: %s found a Health Potion! ***\n", p->name);
-        } else {
-            add_item(p, "Mana Potion", 1, 0);
-            printf("\n*** LOOT: %s found a Mana Potion! ***\n", p->name);
-        }
-    }
-}
-
-/* ================= SHOP ================= */
-void shop_menu(Player *p) {
-    int running = 1;
-    while (running) {
-        printf("\n========== SHOP ==========\n");
-        printf("Gold: %d\n", p->gold);
-        printf("1. Buy Health Potion (20 gold, heals 40 HP)\n");
-        printf("2. Buy Mana Potion (15 gold, restores 30 MP)\n");
-        printf("3. Buy Random Equipment (50 gold)\n");
-        printf("4. Sell an item\n");
-        printf("5. Leave Shop\n");
+        
+        printf("\n");
+        print_status(p);
+        
+        printf("\n========================================\n");
+        printf(" 1. ⚔️ Attack\n");
+        printf(" 2. ✨ Skill\n");
+        printf(" 3. 🧪 Item\n");
+        printf(" 4. 🏃 Flee\n");
+        printf("========================================\n");
         printf("Choice: ");
-        int choice;
-        if (scanf("%d", &choice) != 1) {
-            while (getchar() != '\n');
-            printf("Invalid input.\n");
-            continue;
-        }
-        switch (choice) {
+        
+        int choice = get_valid_input(1, 4);
+        
+        switch(choice) {
             case 1:
-                if (p->gold >= 20) {
-                    p->gold -= 20;
-                    add_item(p, "Health Potion", 1, 40);
-                    printf("Bought a Health Potion!\n");
-                } else {
-                    printf("Not enough gold!\n");
-                }
+                player_attack(p, &e);
                 break;
             case 2:
-                if (p->gold >= 15) {
-                    p->gold -= 15;
-                    add_item(p, "Mana Potion", 1, 0);
-                    printf("Bought a Mana Potion!\n");
-                } else {
-                    printf("Not enough gold!\n");
+                print_skills(p);
+                printf("Choose skill (0 to cancel): ");
+                int s = get_valid_input(0, p->skill_count);
+                if (s > 0) {
+                    player_use_skill(p, &e, s-1);
                 }
                 break;
             case 3:
-                if (p->gold >= 50) {
-                    p->gold -= 50;
-                    EquipSlot slot = (EquipSlot)r(0, MAX_EQUIP - 1);
-                    Equipment eq = generate_equipment(slot, p->level);
-                    printf("You bought: %s [%s] for slot %s\n",
-                           eq.name, rarity_name(eq.rarity), slot_name(slot));
-                    printf("Stats: ATK+%d DEF+%d HP+%d MP+%d\n",
-                           eq.atk_bonus, eq.def_bonus, eq.hp_bonus, eq.mp_bonus);
-                    if (!p->has_equipment[slot]) {
-                        equip_item(p, eq);
-                    } else {
-                        printf("Replace your current %s? (1=Yes, 0=No): ", slot_name(slot));
-                        int c;
-                        if (scanf("%d", &c) == 1 && c == 1) {
-                            equip_item(p, eq);
-                        } else {
-                            printf("Item discarded.\n");
-                        }
-                    }
-                } else {
-                    printf("Not enough gold!\n");
-                }
-                break;
-            case 4: {
                 print_inventory(p);
-                printf("Choose item to sell (0 to cancel): ");
-                int idx;
-                if (scanf("%d", &idx) != 1) {
-                    while (getchar() != '\n');
-                    printf("Invalid input.\n");
-                    continue;
+                printf("Choose item (0 to cancel): ");
+                int it = get_valid_input(0, p->item_count);
+                if (it > 0) {
+                    Item *item = &p->inventory[it-1];
+                    if (item->quantity > 0) {
+                        if (item->heal_amount > 0) {
+                            p->hp += item->heal_amount;
+                            if (p->hp > total_max_hp(p)) p->hp = total_max_hp(p);
+                            printf("💚 Used %s, healed %d HP!\n", item->name, item->heal_amount);
+                            item->quantity--;
+                        } else if (item->restore_mp > 0) {
+                            p->mp += item->restore_mp;
+                            if (p->mp > total_max_mp(p)) p->mp = total_max_mp(p);
+                            printf("💙 Used %s, restored %d MP!\n", item->name, item->restore_mp);
+                            item->quantity--;
+                        }
+                    } else {
+                        printf("You don't have any %s left!\n", item->name);
+                    }
                 }
-                if (idx == 0) break;
-                idx--;
-                if (idx < 0 || idx >= p->item_count) {
-                    printf("Invalid item.\n");
-                    break;
-                }
-                if (p->inventory[idx].quantity <= 0) {
-                    printf("You have none of that to sell.\n");
-                    break;
-                }
-                int sell_price = 10;
-                p->inventory[idx].quantity--;
-                p->gold += sell_price;
-                printf("Sold %s for %d gold!\n", p->inventory[idx].name, sell_price);
                 break;
-            }
-            case 5:
-                running = 0;
-                break;
-            default:
-                printf("Invalid choice.\n");
+            case 4:
+                printf("Attempting to flee...\n");
+                int escape_chance = 30 + p->agility;
+                if (r(0, 100) < escape_chance) {
+                    printf("🏃 Fled successfully!\n");
+                    return 0;
+                } else {
+                    printf("Failed to flee! The enemy attacks!\n");
+                }
                 break;
         }
+        
+        if (e.hp <= 0) {
+            printf("\n========================================\n");
+            printf("     🎉 VICTORY! %s defeated! 🎉\n", e.name);
+            printf("========================================\n");
+            
+            p->kills++;
+            p->gold += e.gold_reward;
+            p->total_gold_earned += e.gold_reward;
+            
+            if (e.is_boss) {
+                p->bosses_defeated++;
+                printf("👑 BOSS DEFEATED! Amazing!\n");
+                if (p->bosses_defeated >= 1) p->achievements[5] = 1;
+                if (p->bosses_defeated >= 5) p->achievements[6] = 1;
+                if (p->bosses_defeated >= 10) p->achievements[7] = 1;
+            }
+            
+            gain_exp(p, e.exp_reward);
+            printf("💰 +%d gold\n", e.gold_reward);
+            
+            int drop_chance = e.is_boss ? 100 : (e.is_elite ? 60 : 25);
+            if (r(0, 100) < drop_chance) {
+                if (r(0, 100) < 50) {
+                    add_item(p, "Health Potion", 1, 40, 0);
+                    printf("🎁 Loot: Health Potion!\n");
+                } else {
+                    add_item(p, "Mana Potion", 1, 0, 30);
+                    printf("🎁 Loot: Mana Potion!\n");
+                }
+            }
+            
+            show_anime_quote();
+            printf("\nPress Enter to continue...");
+            getchar();
+            return 1;
+        }
+        
+        // Enemy turn
+        if (!process_enemy_status(&e)) {
+            enemy_attack(&e, p);
+        }
+        
+        if (p->hp <= 0) {
+            printf("\n========================================\n");
+            printf("     💀 %s has been defeated... 💀\n", p->name);
+            printf("========================================\n");
+            printf("\nPress Enter to continue...");
+            getchar();
+            return -1;
+        }
+        
+        printf("\nPress Enter to continue...");
+        getchar();
     }
+    return 0;
 }
 
-/* ================= SAVE / LOAD ================= */
-#define SAVE_FILE "starzilla_save.dat"
-
-void save_game(Player *p, int map) {
-    FILE *f = fopen(SAVE_FILE, "wb");
+/* ================= SAVE/LOAD IMPLEMENTATIONS ================= */
+void save_game_slot(Player *p, int map, int slot) {
+    if (slot < 1 || slot > MAX_SAVE_SLOTS) {
+        printf("Invalid save slot!\n");
+        return;
+    }
+    char filename[50];
+    snprintf(filename, sizeof(filename), "starzilla_save_%d.dat", slot);
+    FILE *f = fopen(filename, "wb");
     if (!f) {
-        printf("Failed to save game.\n");
+        printf("Failed to save game!\n");
         return;
     }
     fwrite(&map, sizeof(int), 1, f);
     fwrite(p, sizeof(Player), 1, f);
     fclose(f);
-    printf("Game saved successfully!\n");
+    printf("💾 Game saved to slot %d!\n", slot);
 }
 
-int load_game(Player *p, int *map) {
-    FILE *f = fopen(SAVE_FILE, "rb");
-    if (!f) {
-        return 0; /* no save file */
+int load_game_slot(Player *p, int *map, int slot) {
+    if (slot < 1 || slot > MAX_SAVE_SLOTS) {
+        printf("Invalid save slot!\n");
+        return 0;
     }
+    char filename[50];
+    snprintf(filename, sizeof(filename), "starzilla_save_%d.dat", slot);
+    FILE *f = fopen(filename, "rb");
+    if (!f) return 0;
     fread(map, sizeof(int), 1, f);
     fread(p, sizeof(Player), 1, f);
     fclose(f);
     return 1;
 }
 
-/* ================= BATTLE ================= */
-int battle(Player *p, int map) {
-    Enemy e = create_enemy(p, map);
-
-    while (p->hp > 0 && e.hp > 0) {
-        print_status(p);
-        printf("\n%s HP: %d/%d", e.name, e.hp, e.max_hp);
-        if (e.status != STATUS_NONE) {
-            printf(" [%s]", status_name(e.status));
-        }
-        printf("\n");
-        printf("\n1) Attack\n");
-        printf("2) Skill\n");
-        printf("3) Item\n");
-        printf("4) Flee\n");
-        printf("> ");
-        int choice;
-        if (scanf("%d", &choice) != 1) {
-            while (getchar() != '\n');
-            printf("Invalid input.\n");
-            continue;
-        }
-        switch (choice) {
-            case 1:
-                player_attack(p, &e);
-                break;
-            case 2: {
-                print_skills(p);
-                printf("Choose skill: ");
-                int s;
-                if (scanf("%d", &s) != 1) {
-                    while (getchar() != '\n');
-                    printf("Invalid input.\n");
-                    continue;
-                }
-                player_use_skill(p, &e, s - 1);
-                break;
-            }
-            case 3: {
-                print_inventory(p);
-                printf("Choose item: ");
-                int it;
-                if (scanf("%d", &it) != 1) {
-                    while (getchar() != '\n');
-                    printf("Invalid input.\n");
-                    continue;
-                }
-                use_item(p, it - 1);
-                break;
-            }
-            case 4:
-                if (r(0, 1)) {
-                    printf("You successfully fled!\n");
-                    return 0;
-                }
-                printf("Couldn't escape!\n");
-                break;
-            default:
-                printf("Invalid choice.\n");
-                continue;
-        }
-
-        if (e.hp <= 0) {
-            printf("\n%s defeated %s!\n", p->name, e.name);
-            p->kills++;
-            p->gold += e.gold_reward;
-            gain_exp(p, e.exp_reward);
-            printf("Gained %d gold!\n", e.gold_reward);
-            if (e.is_boss) {
-                printf("BOSS CLEARED! Amazing!\n");
-            }
-            roll_loot_drop(p, &e, map);
-            return 1;
-        }
-
-        /* Enemy turn (may be skipped due to status effect) */
-        int skip = process_enemy_status(&e);
-        if (!skip) {
-            enemy_attack(&e, p);
-        }
-
-        if (p->hp <= 0) {
-            printf("\n%s has been defeated...\n", p->name);
-            return -1;
+void list_save_slots(void) {
+    printf("\n========== SAVE SLOTS ==========\n");
+    for (int i = 1; i <= MAX_SAVE_SLOTS; i++) {
+        char filename[50];
+        snprintf(filename, sizeof(filename), "starzilla_save_%d.dat", i);
+        FILE *f = fopen(filename, "rb");
+        if (f) {
+            printf("Slot %d: 💾 SAVED\n", i);
+            fclose(f);
+        } else {
+            printf("Slot %d: 📭 EMPTY\n", i);
         }
     }
-    return 0;
+    printf("================================\n");
+}
+
+/* ================= UI IMPLEMENTATIONS ================= */
+void show_rules(void) {
+    printf("\n========================================\n");
+    printf("              📖 GAME RULES\n");
+    printf("========================================\n");
+    printf("\n 1. Choose your class and map\n");
+    printf(" 2. Fight enemies to gain EXP and gold\n");
+    printf(" 3. Every 100 EXP = Level Up\n");
+    printf(" 4. Boss appears every 5 levels\n");
+    printf(" 5. Skills use MP - choose wisely\n");
+    printf(" 6. Use items to heal and restore MP\n");
+    printf(" 7. Dodge and block can save your life\n");
+    printf(" 8. Status effects: Burn, Poison, Freeze\n");
+    printf(" 9. HP = 0 means Game Over\n");
+    printf("10. Anime quotes appear randomly for motivation!\n");
+    printf("\n========================================\n");
+    printf("\nPress Enter to continue...");
+    getchar();
+}
+
+int choose_map(void) {
+    printf("\n========================================\n");
+    printf("            🗺️ MAP SELECTION\n");
+    printf("========================================\n");
+    printf("\n 1. Forest        - Basic enemies\n");
+    printf(" 2. Dungeon       - Undead enemies\n");
+    printf(" 3. Dark Zone     - Shadow enemies\n");
+    printf(" 4. Chaos World   - Demon enemies\n");
+    printf(" 5. Dragon's Peak - Dragon enemies\n");
+    printf("\nChoose your map (1-5): ");
+    
+    int m = get_valid_input(1, 5);
+    const char *names[] = {"", "Forest", "Dungeon", "Dark Zone", "Chaos World", "Dragon's Peak"};
+    printf("\nSelected Map: %s\n", names[m]);
+    return m;
+}
+
+void show_game_over(Player *p) {
+    printf("\n");
+    printf("========================================\n");
+    printf("           💀 GAME OVER 💀\n");
+    printf("========================================\n");
+    printf("\nYour adventure has ended...\n");
+    
+    printf("\n========== FINAL STATISTICS ==========\n");
+    printf("  Name: %s\n", p->name);
+    printf("  Class: %s\n", class_name(p->cls));
+    printf("  Level: %d\n", p->level);
+    printf("  Kills: %d\n", p->kills);
+    printf("  Bosses Defeated: %d\n", p->bosses_defeated);
+    printf("  Gold: %d\n", p->gold);
+    printf("  Damage Dealt: %d\n", p->damage_dealt);
+    printf("  Damage Taken: %d\n", p->damage_taken);
+    printf("  Highest Combo: %d\n", p->highest_combo);
+    printf("========================================\n");
+    show_anime_quote();
+    printf("\nPress Enter to exit...");
+    getchar();
 }
 
 /* ================= MAIN ================= */
@@ -1065,79 +1168,199 @@ int main(void) {
     srand((unsigned int)time(NULL));
     Player player;
     char name[MAX_NAME];
-    int map;
-
-    printf("=================================\n");
-    printf("       STARZILLA RPG\n");
-    printf("=================================\n");
-
-    /* Check for existing save */
-    printf("\n1. New Game\n");
-    printf("2. Load Game\n");
-    printf("Choice: ");
-    int start_choice;
-    if (scanf("%d", &start_choice) != 1) {
-        while (getchar() != '\n');
-        start_choice = 1;
-    }
-
-    if (start_choice == 2) {
-        if (load_game(&player, &map)) {
-            printf("\nGame loaded! Welcome back, %s the %s (Lv.%d)!\n",
+    int map = 1;
+    
+    printf("\n========================================\n");
+    printf("        ⭐ STARZILLA RPG ⭐\n");
+    printf("        ✨ Anime Edition ✨\n");
+    printf("          v2.0\n");
+    printf("========================================\n");
+    show_anime_quote();
+    
+    printf("\n========================================\n");
+    printf("  💾 SAVE / LOAD MENU\n");
+    printf("========================================\n");
+    printf("\n 1. New Game\n");
+    printf(" 2. Load Game\n");
+    printf(" 3. List Save Slots\n");
+    printf("\nChoice: ");
+    
+    int start = get_valid_input(1, 3);
+    
+    if (start == 2) {
+        list_save_slots();
+        printf("\nEnter save slot (1-3): ");
+        int slot = get_valid_input(1, 3);
+        if (load_game_slot(&player, &map, slot)) {
+            printf("\n========================================\n");
+            printf("     📂 GAME LOADED SUCCESSFULLY!\n");
+            printf("========================================\n");
+            printf("\nWelcome back, %s the %s (Lv.%d)!\n",
                    player.name, class_name(player.cls), player.level);
+            show_anime_quote();
+            printf("\nPress Enter to continue...");
+            getchar();
         } else {
-            printf("\nNo save file found. Starting a new game.\n");
-            start_choice = 1;
+            printf("\nNo save found. Starting new game.\n");
+            start = 1;
         }
     }
-
-    if (start_choice != 2) {
+    
+    if (start == 3) {
+        list_save_slots();
+        printf("\n1. New Game\n2. Load Game\nChoice: ");
+        int choice = get_valid_input(1, 2);
+        if (choice == 2) {
+            printf("Enter save slot (1-3): ");
+            int slot = get_valid_input(1, 3);
+            if (!load_game_slot(&player, &map, slot)) {
+                printf("No save found. Starting new game.\n");
+                start = 1;
+            } else {
+                printf("\n========================================\n");
+                printf("     📂 GAME LOADED SUCCESSFULLY!\n");
+                printf("========================================\n");
+                printf("\nWelcome back, %s the %s (Lv.%d)!\n",
+                       player.name, class_name(player.cls), player.level);
+                show_anime_quote();
+                printf("\nPress Enter to continue...");
+                getchar();
+                start = 2;
+            }
+        } else {
+            start = 1;
+        }
+    }
+    
+    if (start != 2) {
         show_rules();
         ClassType cls = choose_class();
         map = choose_map();
         printf("\nEnter your character's name: ");
-        if (scanf("%31s", name) != 1) {
+        fgets(name, sizeof(name), stdin);
+        name[strcspn(name, "\n")] = '\0';
+        if (strlen(name) == 0) {
             strcpy(name, "Hero");
         }
+        
         init_player(&player, name, cls);
-        printf("\nWelcome, %s the %s! Your adventure begins.\n", player.name, class_name(player.cls));
+        
+        printf("\n========================================\n");
+        printf("     🎮 WELCOME TO THE GAME!\n");
+        printf("========================================\n");
+        printf("\nWelcome, %s the %s!\n", player.name, class_name(player.cls));
+        printf("Your adventure begins now...\n");
+        show_anime_quote();
+        printf("\nPress Enter to continue...");
+        getchar();
     }
-
+    
+    // Main game loop
     while (1) {
-        int choice;
-        printf("\n===== MAIN MENU =====\n");
-        printf("1. Battle\n");
-        printf("2. Stats / Inventory\n");
-        printf("3. Shop\n");
-        printf("4. Save Game\n");
-        printf("5. Exit\n");
+        printf("\n========================================\n");
+        printf("             🏠 MAIN MENU\n");
+        printf("========================================\n");
+        printf("\n 1. ⚔️ Battle\n");
+        printf(" 2. 📊 Stats & Inventory\n");
+        printf(" 3. 🏪 Shop\n");
+        printf(" 4. 💾 Save Game\n");
+        printf(" 5. 📂 Load Game\n");
+        printf(" 6. 🚪 Exit\n");
+        printf("\n========================================\n");
         printf("Choice: ");
-        if (scanf("%d", &choice) != 1) {
-            while (getchar() != '\n');
-            printf("Invalid input.\n");
-            continue;
-        }
-        if (choice == 1) {
-            int result = battle(&player, map);
-            if (result == -1) {
-                printf("\nGAME OVER\n");
-                show_stats(&player);
-                /* remove save on death so player must start fresh */
-                remove(SAVE_FILE);
+        
+        int choice = get_valid_input(1, 6);
+        
+        switch(choice) {
+            case 1: {
+                int result = battle(&player, map);
+                if (result == -1) {
+                    show_game_over(&player);
+                    return 0;
+                }
+                if (result == 1) {
+                    save_game_slot(&player, map, 1);
+                    printf("\n💾 Auto-saved to slot 1\n");
+                }
                 break;
             }
-        } else if (choice == 2) {
-            show_stats(&player);
-        } else if (choice == 3) {
-            shop_menu(&player);
-        } else if (choice == 4) {
-            save_game(&player, map);
-        } else if (choice == 5) {
-            printf("\nGoodbye, %s!\n", player.name);
-            show_stats(&player);
-            break;
-        } else {
-            printf("Invalid choice.\n");
+            case 2:
+                show_stats(&player);
+                break;
+            case 3: {
+                printf("\n========================================\n");
+                printf("              🏪 SHOP\n");
+                printf("========================================\n");
+                printf("\nGold: %d\n", player.gold);
+                printf("\n 1. Health Potion (20g) - Heals 40 HP\n");
+                printf(" 2. Mana Potion (15g) - Restores 30 MP\n");
+                printf(" 3. Bread (10g) - Heals 15 HP\n");
+                printf(" 4. Leave Shop\n");
+                printf("\nChoice: ");
+                
+                int shop_choice = get_valid_input(1, 4);
+                
+                if (shop_choice == 1 && player.gold >= 20) {
+                    player.gold -= 20;
+                    add_item(&player, "Health Potion", 1, 40, 0);
+                    printf("🛒 Bought Health Potion!\n");
+                } else if (shop_choice == 2 && player.gold >= 15) {
+                    player.gold -= 15;
+                    add_item(&player, "Mana Potion", 1, 0, 30);
+                    printf("🛒 Bought Mana Potion!\n");
+                } else if (shop_choice == 3 && player.gold >= 10) {
+                    player.gold -= 10;
+                    add_item(&player, "Bread", 1, 15, 0);
+                    printf("🛒 Bought Bread!\n");
+                } else if (shop_choice == 4) {
+                    printf("Leaving shop.\n");
+                } else {
+                    printf("Not enough gold or invalid choice!\n");
+                }
+                printf("\nPress Enter to continue...");
+                getchar();
+                break;
+            }
+            case 4:
+                list_save_slots();
+                printf("\nSave slot (1-3): ");
+                int slot = get_valid_input(1, 3);
+                save_game_slot(&player, map, slot);
+                printf("\nPress Enter to continue...");
+                getchar();
+                break;
+            case 5:
+                list_save_slots();
+                printf("\nLoad slot: ");
+                int load_slot = get_valid_input(1, 3);
+                if (load_game_slot(&player, &map, load_slot)) {
+                    printf("\n========================================\n");
+                    printf("     📂 GAME LOADED SUCCESSFULLY!\n");
+                    printf("========================================\n");
+                    printf("\nWelcome back, %s the %s (Lv.%d)!\n",
+                           player.name, class_name(player.cls), player.level);
+                    show_anime_quote();
+                } else {
+                    printf("Failed to load game!\n");
+                }
+                printf("\nPress Enter to continue...");
+                getchar();
+                break;
+            case 6:
+                printf("\n========================================\n");
+                printf("     👋 GOODBYE, %s!\n", player.name);
+                printf("========================================\n");
+                printf("\nSave before quitting? (1=Yes): ");
+                int save_quit = get_valid_input(1, 2);
+                if (save_quit == 1) {
+                    printf("Save slot (1-3): ");
+                    int quit_slot = get_valid_input(1, 3);
+                    save_game_slot(&player, map, quit_slot);
+                }
+                show_stats(&player);
+                printf("\n⭐ Thank you for playing Starzilla RPG! ⭐\n");
+                show_anime_quote();
+                return 0;
         }
     }
     return 0;
