@@ -1164,9 +1164,7 @@ int main(void) {
     int map = 1;
     
     printf("\n========================================\n");
-    printf("        ⭐ STARZILLA RPG ⭐\n");
-    printf("        ✨ Anime Edition ✨\n");
-    printf("          v2.0\n");
+    printf("        ⭐ RPG Battle Game⭐\n");
     printf("========================================\n");
     show_anime_quote();
     
