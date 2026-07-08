@@ -1,236 +1,191 @@
+/*
+ * CODE QUEST RPG 
+ */
+
 #include <stdio.h>
 
-/* ----------- Function Prototypes ----------- */
 void showStats(int health, int xp);
-void askQuestion(int *health, int *xp, char level[], char question[], int correctAnswer);
+void askQuestion(int *health, int *xp, char level[], char question[], int correctAnswer, FILE *report);
 
-/* ============================================================
-   showStats()
-   Purpose : Current health aur XP screen par dikhata hai
-   ============================================================ */
+
 void showStats(int health, int xp)
 {
-    printf("\n------------------------------------\n");
-    printf("  Health : %d/100  |  XP : %d/100\n", health, xp);
-    printf("------------------------------------\n");
+    printf("\nHealth: %d/100 | XP: %d/100\n", health, xp);
 }
 
-/* ============================================================
-   askQuestion()
-   Purpose : Ek question poochta hai, answer check karta hai,
-             aur health/xp ko update karta hai
-   Parameters:
-     health        - pointer to health variable
-     xp            - pointer to xp variable
-     level         - level ka naam (string)
-     question      - question text (string)
-     correctAnswer - sahi jawab (integer)
-   ============================================================ */
-void askQuestion(int *health, int *xp, char level[], char question[], int correctAnswer)
+
+void askQuestion(int *health, int *xp, char level[], char question[], int correctAnswer, FILE *report)
 {
     int userAnswer;
 
-    printf("\n====================================\n");
-    printf("  %s\n", level);
-    printf("====================================\n");
-    printf("\n%s\n", question);
-    printf("\nYour Answer : ");
+    printf("\n>>> %s <<<\n", level);
+    printf("%s\n", question);
+    printf("Your Answer: ");
     scanf("%d", &userAnswer);
+
+    fprintf(report, "Level: %s\n", level);
+    fprintf(report, "User Answer: %d | Correct Answer: %d\n", userAnswer, correctAnswer);
 
     if (userAnswer == correctAnswer)
     {
         *xp += 10;
-        printf("\n  [CORRECT!] +10 XP\n");
+        printf("[CORRECT!] +10 XP\n");
+        fprintf(report, "Result: CORRECT (+10 XP)\n\n"); 
     }
     else
     {
         *health -= 10;
-        printf("\n  [WRONG!] -10 Health\n");
-        printf("  Correct Answer was : %d\n", correctAnswer);
+        printf("[WRONG!] -10 Health\n");
+        printf("Correct Answer was: %d\n", correctAnswer);
+        fprintf(report, "Result: WRONG (-10 Health)\n\n"); 
     }
 
     showStats(*health, *xp);
 }
 
-/* ============================================================
-   main()
-   Purpose : Game ka pura flow control karta hai
-   ============================================================ */
+
 int main()
 {
     int health = 100;
     int xp     = 0;
 
-    /* ------- Welcome Screen ------- */
-    printf("====================================\n");
-    printf("         CODE QUEST RPG\n");
-    printf("====================================\n");
-    printf("\n  Welcome Young Programmer!\n");
-    printf("  Answer the questions correctly.\n\n");
-    printf("  Correct Answer = +10 XP\n");
-    printf("  Wrong Answer   = -10 Health\n");
-    printf("  Health = 0     = GAME OVER\n");
+    FILE *reportFile = fopen("game_report.txt", "w");
+    
+    if (reportFile == NULL) {
+        printf("Error: File nahi ban saki!\n");
+        return 1;
+    }
+
+    fprintf(reportFile, " CODE QUEST RPG - PLAYER REPORT \n\n");
+
+    
+    printf("--- CODE QUEST RPG ---\n");
+    printf("Welcome Young Programmer!\n");
+    printf("Answer the questions correctly.\n");
+    printf("Correct Answer = +10 XP\n");
+    printf("Wrong Answer = -10 Health\n");
+    printf("Health = 0 = GAME OVER\n");
 
     showStats(health, xp);
 
-    /* ---------------- Level 1 ---------------- */
-    askQuestion(
-        &health, &xp,
-        "LEVEL 1 : Variable Forest",
-        "What is the value of x?\n\n  int x = 5;",
-        5
-    );
-    if (health <= 0)
-    {
-        printf("\n  GAME OVER! Better luck next time.\n");
-        printf("====================================\n");
+    
+    askQuestion(&health, &xp, "LEVEL 1 : Variable Forest", "What is the value of x?\n int x = 5;", 5, reportFile);
+    if (health <= 0) {
+        printf("\nGAME OVER! Better luck next time.\n");
+        fprintf(reportFile, "STATUS: GAME OVER\n");
+        fclose(reportFile); 
         return 0;
     }
 
-    /* ---------------- Level 2 ---------------- */
-    askQuestion(
-        &health, &xp,
-        "LEVEL 2 : Loop Cave",
-        "How many times will this loop run?\n\n  for(i = 1; i <= 3; i++)",
-        3
-    );
-    if (health <= 0)
-    {
-        printf("\n  GAME OVER! Better luck next time.\n");
-        printf("====================================\n");
+    
+    askQuestion(&health, &xp, "LEVEL 2 : Loop Cave", "How many times will this loop run?\n for(i = 1; i <= 3; i++)", 3, reportFile);
+    if (health <= 0) {
+        printf("\nGAME OVER! Better luck next time.\n");
+        fprintf(reportFile, "STATUS: GAME OVER\n");
+        fclose(reportFile);
         return 0;
     }
 
-    /* ---------------- Level 3 ---------------- */
-    askQuestion(
-        &health, &xp,
-        "LEVEL 3 : Array Kingdom",
-        "What is arr[1]?\n\n  int arr[3] = {10, 20, 30};",
-        20
-    );
-    if (health <= 0)
-    {
-        printf("\n  GAME OVER! Better luck next time.\n");
-        printf("====================================\n");
+    
+    askQuestion(&health, &xp, "LEVEL 3 : Array Kingdom", "What is arr[1]?\n int arr[3] = {10, 20, 30};", 20, reportFile);
+    if (health <= 0) {
+        printf("\nGAME OVER! Better luck next time.\n");
+        fprintf(reportFile, "STATUS: GAME OVER\n");
+        fclose(reportFile);
         return 0;
     }
 
-    /* ---------------- Level 4 ---------------- */
-    askQuestion(
-        &health, &xp,
-        "LEVEL 4 : Function Tower",
-        "What is the result of sum(2, 3)?",
-        5
-    );
-    if (health <= 0)
-    {
-        printf("\n  GAME OVER! Better luck next time.\n");
-        printf("====================================\n");
+    
+    askQuestion(&health, &xp, "LEVEL 4 : Function Tower", "What is the result of sum(2, 3)?", 5, reportFile);
+    if (health <= 0) {
+        printf("\nGAME OVER! Better luck next time.\n");
+        fprintf(reportFile, "STATUS: GAME OVER\n");
+        fclose(reportFile);
         return 0;
     }
 
-    /* ---------------- Level 5 ---------------- */
-    askQuestion(
-        &health, &xp,
-        "LEVEL 5 : Pointer Dragon",
-        "int x = 5;\nint *p = &x;\nWhat is *p ?",
-        5
-    );
-    if (health <= 0)
-    {
-        printf("\n  GAME OVER! Better luck next time.\n");
-        printf("====================================\n");
+    
+    askQuestion(&health, &xp, "LEVEL 5 : Pointer Dragon", "int x = 5;\nint *p = &x;\nWhat is *p ?", 5, reportFile);
+    if (health <= 0) {
+        printf("\nGAME OVER! Better luck next time.\n");
+        fprintf(reportFile, "STATUS: GAME OVER\n");
+        fclose(reportFile);
         return 0;
     }
 
-    /* ---------------- Level 6 ---------------- */
-    askQuestion(
-        &health, &xp,
-        "LEVEL 6 : Data Type Valley",
-        "Size of char in bytes?",
-        1
-    );
-    if (health <= 0)
-    {
-        printf("\n  GAME OVER! Better luck next time.\n");
-        printf("====================================\n");
+    
+    askQuestion(&health, &xp, "LEVEL 6 : Data Type Valley", "Size of char in bytes?", 1, reportFile);
+    if (health <= 0) {
+        printf("\nGAME OVER! Better luck next time.\n");
+        fprintf(reportFile, "STATUS: GAME OVER\n");
+        fclose(reportFile);
         return 0;
     }
 
-    /* ---------------- Level 7 ---------------- */
-    askQuestion(
-        &health, &xp,
-        "LEVEL 7 : Math Mountain",
-        "What is 10 % 3 ?",
-        1
-    );
-    if (health <= 0)
-    {
-        printf("\n  GAME OVER! Better luck next time.\n");
-        printf("====================================\n");
+    
+    askQuestion(&health, &xp, "LEVEL 7 : Math Mountain", "What is 10 %% 3 ?", 1, reportFile); 
+    if (health <= 0) {
+        printf("\nGAME OVER! Better luck next time.\n");
+        fprintf(reportFile, "STATUS: GAME OVER\n");
+        fclose(reportFile);
         return 0;
     }
 
-    /* ---------------- Level 8 ---------------- */
-    askQuestion(
-        &health, &xp,
-        "LEVEL 8 : If Castle",
-        "int x = 5;\nif(x > 3)\n  printf(1);\n\nOutput?",
-        1
-    );
-    if (health <= 0)
-    {
-        printf("\n  GAME OVER! Better luck next time.\n");
-        printf("====================================\n");
+    
+    askQuestion(&health, &xp, "LEVEL 8 : If Castle", "int x = 5;\nif(x > 3)\n printf(1);\n\nOutput?", 1, reportFile);
+    if (health <= 0) {
+        printf("\nGAME OVER! Better luck next time.\n");
+        fprintf(reportFile, "STATUS: GAME OVER\n");
+        fclose(reportFile);
         return 0;
     }
 
-    /* ---------------- Level 9 ---------------- */
-    askQuestion(
-        &health, &xp,
-        "LEVEL 9 : While River",
-        "int i = 1;\nwhile(i <= 2) { i++; }\n\nRuns how many times?",
-        2
-    );
-    if (health <= 0)
-    {
-        printf("\n  GAME OVER! Better luck next time.\n");
-        printf("====================================\n");
+    askQuestion(&health, &xp, "LEVEL 9 : While River", "int i = 1;\nwhile(i <= 2) { i++; }\n\nRuns how many times?", 2, reportFile);
+    if (health <= 0) {
+        printf("\nGAME OVER! Better luck next time.\n");
+        fprintf(reportFile, "STATUS: GAME OVER\n");
+        fclose(reportFile);
         return 0;
     }
 
-    /* ---------------- Final Boss ---------------- */
-    askQuestion(
-        &health, &xp,
-        "FINAL BOSS : The Ultimate Challenge",
-        "What is  2 + 3 * 4 ?",
-        14
-    );
-    if (health <= 0)
-    {
-        printf("\n  GAME OVER! Better luck next time.\n");
-        printf("====================================\n");
+    askQuestion(&health, &xp, "FINAL BOSS : The Ultimate Challenge", "What is 2 + 3 * 4 ?", 14, reportFile);
+    if (health <= 0) {
+        printf("\nGAME OVER! Better luck next time.\n");
+        fprintf(reportFile, "STATUS: GAME OVER\n");
+        fclose(reportFile);
         return 0;
     }
 
-    /* ------- Final Result Screen ------- */
-    printf("\n====================================\n");
-    printf("         GAME COMPLETE!\n");
-    printf("====================================\n");
-    printf("  Final XP     = %d / 100\n", xp);
-    printf("  Final Health = %d / 100\n", health);
-    printf("------------------------------------\n");
+    printf("\n** GAME COMPLETE! **\n");
+    printf("Final XP = %d / 100\n", xp);
+    printf("Final Health = %d / 100\n", health);
 
-    if (xp >= 80)
-        printf("  Rank : MASTER PROGRAMMER\n");
-    else if (xp >= 60)
-        printf("  Rank : GOOD PROGRAMMER\n");
-    else if (xp >= 40)
-        printf("  Rank : AVERAGE PROGRAMMER\n");
-    else
-        printf("  Rank : BEGINNER PROGRAMMER\n");
+    fprintf(reportFile, "====================================\n");
+    fprintf(reportFile, "FINAL PERFORMANCE:\n");
+    fprintf(reportFile, "Final XP: %d / 100\n", xp);
+    fprintf(reportFile, "Final Health: %d / 100\n", health);
 
-    printf("====================================\n");
+    if (xp >= 80) {
+        printf("Rank : MASTER PROGRAMMER\n");
+        fprintf(reportFile, "Rank: MASTER PROGRAMMER\n");
+    }
+    else if (xp >= 60) {
+        printf("Rank : GOOD PROGRAMMER\n");
+        fprintf(reportFile, "Rank: GOOD PROGRAMMER\n");
+    }
+    else if (xp >= 40) {
+        printf("Rank : AVERAGE PROGRAMMER\n");
+        fprintf(reportFile, "Rank: AVERAGE PROGRAMMER\n");
+    }
+    else {
+        printf("Rank : BEGINNER PROGRAMMER\n");
+        fprintf(reportFile, "Rank: BEGINNER PROGRAMMER\n");
+    }
+    
+    fprintf(reportFile, "STATUS: GAME COMPLETED SUCCESSFULLY\n");
+
+    fclose(reportFile); 
+    printf("\n[Record saved in game_report.txt]\n");
 
     return 0;
 }
